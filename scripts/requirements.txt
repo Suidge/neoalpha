@@ -1,0 +1,10 @@
+# Investment System — Python Dependencies
+#
+# DCF model generation & validation
+openpyxl>=3.1.0
+
+# Momentum scanner and other analysis scripts have no external dependencies
+# beyond Python 3.10+ stdlib (json, subprocess, math, datetime, argparse, etc.)
+#
+# Optional (for enhanced statistical precision in momentum_scanner.py):
+# numpy>=1.24.0

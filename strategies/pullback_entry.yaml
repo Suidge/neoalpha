@@ -1,0 +1,50 @@
+# 回调低吸策略 — 价格回踩支撑 + 趋势完好 → 低吸
+name: pullback_entry
+display_name: 回调低吸策略
+description: 在多头趋势中，价格回踩关键支撑位（MA20/thesis 支撑/前低）时寻找低吸入场点。适用于 thesis 标的已确认多头结构但短期超买的场景。
+category: trend
+core_rules: [1, 2, 4]
+required_tools:
+  - get_daily_history
+  - analyze_trend
+default_active: true
+default_router: false
+default_priority: 30
+
+instructions: |
+  **回调低吸策略（Pullback Entry Strategy）**
+
+  适用场景：
+  - 标的处于多头趋势（MA5 ≥ MA10 ≥ MA20，MA20 斜率向上）
+  - 但短期超买（价格远离 MA5，乖离率 > 8%）
+  - 等待价格自然回调至支撑位后再入场
+
+  入场条件：
+  1. **趋势确认**
+     - MA5 ≥ MA10 ≥ MA20 多头排列
+     - MA20 斜率向上（非走平或下行）
+  2. **回调到位**
+     - 价格回落至以下任一位置（偏差 < 2%）：
+       a) MA20 均线
+       b) thesis 弱支撑位
+       c) 前期整理平台上沿
+     - 回调过程缩量（抛压衰竭信号）
+  3. **企稳信号**
+     - 收阳线或长下影线（买盘介入）
+     - 当日成交量 > 前 5 日均量（放量企稳确认）
+
+  禁止入场：
+  - 放量大跌（> -5% 且量比 > 2）→ 可能是趋势破坏，非回调
+  - 跌破 thesis 强支撑位 → 趋势可能反转
+  - 连续 3 日以上收盘低于 MA20 → 多头结构弱化
+
+  仓位与止损：
+  - 首次回踩 MA20：仓位 15-20%
+  - 二次回踩同一支撑：仓位 10-15%（降低仓位，警惕假突破）
+  - 止损：MA20 下方 -3% 或 thesis 止损位，取更紧者
+  - 止盈：前期高点或 thesis 中期目标价
+
+  评分调整：
+  - 多头排列 + 缩量回调 + 放量企稳：sentiment_score +12
+  - 仅缩量回调无企稳信号：sentiment_score +5（等确认）
+  - 放量跌破 MA20：sentiment_score -10

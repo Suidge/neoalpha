@@ -1,0 +1,53 @@
+# 趋势跟踪策略 — 多头排列 + 量能确认 → 持有/加仓
+name: trend_follow
+display_name: 趋势跟踪策略
+description: 趋势确认后的持仓管理策略。判断趋势是否延续、是否值得继续持有、以及在趋势加速段是否追仓。
+category: trend
+core_rules: [2, 3, 6, 7]
+required_tools:
+  - get_daily_history
+  - analyze_trend
+default_active: true
+default_router: true
+default_priority: 10
+market_regimes: [trending_up]
+
+instructions: |
+  **趋势跟踪策略（Trend Following Strategy）**
+
+  适用场景：
+  - 已持有仓位，需要判断是否继续持有或加仓
+  - 标的处于明显多头趋势但不确定是否进入加速/末期
+
+  趋势健康度检查（每周/每两周）：
+  1. **均线系统**
+     - MA5 ≥ MA10 ≥ MA20 → 健康多头（+2 分）
+     - MA10 ≥ MA20 但 MA5 回落 → 短期调整中（+1 分）
+     - MA20 走平或下行 → 趋势弱化（-2 分）
+  2. **量价关系**
+     - 上涨放量、回调缩量 → 健康（+2 分）
+     - 上涨缩量 → 动能不足（0 分）
+     - 放量滞涨或放量下跌 → 警惕（-2 分）
+  3. **SMAM 动量**
+     - CMS > +0.25 且 Stability ≥ 0.6 → 趋势延续（+2 分）
+     - CMS +0~0.25 → 动量中性（0 分）
+     - CMS < 0 → 动量走弱（-2 分）
+
+  总分 ≥ 4 → 健康持有，可考虑加仓
+  总分 2-3 → 持有但不再加仓，收紧止损
+  总分 ≤ 1 → 准备减仓，关注出场信号
+
+  趋势加速段追仓规则：
+  - 放量突破 thesis 关键阻力位 → 可追仓 10-15%
+  - 连续 3 日收盘在 MA5 上方且 MA5 斜率加速 → 可加仓 5-10%
+  - 单日放量 > 200% 均量 + 涨停/大涨 → 不追，等次日分化
+
+  趋势末期信号（准备离场）：
+  - CMS 从 Q1 跌至 Q3 以下
+  - MA5 开始走平 + 量能萎缩
+  - 出现长上影线 + 放量（高位出货特征）
+
+  评分调整：
+  - 趋势健康 + SMAM Q1：sentiment_score +10
+  - 趋势健康但 SMAM 中性：sentiment_score +5
+  - 趋势弱化信号出现：sentiment_score -8

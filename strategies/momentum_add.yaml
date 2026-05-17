@@ -1,0 +1,49 @@
+# 动量加仓策略 — SMAM Q1/Q2 + 回调确认 → 加仓
+name: momentum_add
+display_name: 动量加仓策略
+description: 基于 SMAM 动量信号 + 价格回调确认的加仓策略。当标的处于强动量区间且价格回调至支撑位时，为最佳加仓窗口。
+category: trend
+core_rules: [1, 2, 3, 7]
+required_tools:
+  - get_daily_history
+  - analyze_trend
+  - smam_scan
+default_active: true
+default_router: false
+default_priority: 20
+market_regimes: [trending_up, consolidation]
+
+instructions: |
+  **动量加仓策略（Momentum Add Strategy）**
+
+  适用场景：
+  - SMAM 扫描显示标的处于 Q1 (CMS > +0.84) 或 Q2 (CMS > +0.25)
+  - 价格从近期高点回调至关键支撑位
+  - 寻找"动量未破坏 + 价格给机会"的加仓窗口
+
+  入场条件（必须同时满足）：
+  1. **动量确认（优先级最高）**
+     - SMAM CMS > +0.25（正动量）
+     - Stability ≥ 0.6（多周期信号一致）
+     - VAM > 0（量能配合，非缩量下跌）
+  2. **位置确认**
+     - 价格回调至 MA20 或 thesis 关键支撑位附近（偏差 < 3%）
+     - 回调幅度 < 前期涨幅的 38.2%（非趋势破坏性回调）
+  3. **风控门禁**
+     - 对照 thesis 的「逻辑破坏条件」：全部未触发
+     - 无重大利空新闻（如核心客户流失、产品验证失败）
+
+  仓位建议：
+  - Q1 强动量（CMS > +0.84）→ 可加仓 25-30%
+  - Q2 正动量（CMS +0.25~0.84）→ 可加仓 15-20%
+  - 价格低于理想买点但未到止损 → 可加仓 5-10%（试探）
+
+  出场条件：
+  - CMS 跌入 Q4（< -0.25）→ 减仓 30%
+  - CMS 跌入 Q5（< -0.84）且逻辑破坏条件触发 → 清仓
+  - 价格跌破 thesis 止损位 → 无条件清仓
+
+  评分调整：
+  - Q1 + 回调至支撑 + Stability ≥ 0.8：sentiment_score +15
+  - Q2 + 回调至支撑 + VAM > 0：sentiment_score +10
+  - CMS 正但价格远离支撑位：sentiment_score -5（追高风险）

@@ -1,0 +1,67 @@
+# 止损逃生策略 — 逻辑破坏 / 动量恶化 → 逃生
+name: stop_loss_exit
+display_name: 止损逃生策略
+description: 当 thesis 逻辑破坏条件触发或 SMAM 动量急剧恶化时，执行有序撤退。不是"恐慌卖出"，而是"有纪律的风控执行"。
+category: framework
+core_rules: [1, 5]
+required_tools:
+  - get_daily_history
+  - smam_scan
+default_active: true
+default_router: false
+default_priority: 50
+
+instructions: |
+  **止损逃生策略（Stop Loss & Exit Strategy）**
+
+  适用场景：
+  - thesis 逻辑破坏条件触发
+  - SMAM CMS 跌入 Q5（< -0.84）
+  - 突发重大利空
+  - 需要执行纪律性风控而非情绪化操作
+
+  逃生分级：
+
+  ### 🟡 黄色警报 — 减仓 20-30%
+  触发条件（任一）：
+  - SMAM CMS 从正跌入 Q4（< -0.25）但逻辑破坏条件未触发
+  - 价格跌破 MA20 且连续 3 日无法收回
+  - 出现未预期利空新闻但需验证（如行业政策传闻）
+  
+  操作：
+  - 当日或次日开盘减仓 20-30%
+  - 剩余仓位收紧止损至 MA20 下方 -2%
+  - 观察 1-2 个交易日确认信号
+
+  ### 🟠 橙色警报 — 减仓 50%
+  触发条件（任一）：
+  - SMAM CMS < -0.84（Q5）但逻辑破坏条件未全部触发
+  - 价格跌破 thesis 中等支撑位且放量
+  - 连续两季财报不及预期或核心产品 ASP 持续下降
+  
+  操作：
+  - 分 2-3 天减仓 50%（避免一次性冲击）
+  - 停止任何加仓操作
+  - 重新评估 thesis 是否需要重大修改
+
+  ### 🔴 红色警报 — 清仓
+  触发条件（任一）：
+  - thesis「逻辑破坏条件」中任何一条触发
+  - SMAM Q5 + 逻辑破坏条件触发（双重确认）
+  - 价格跌破 thesis 止损位（强支撑）
+  - 核心客户流失、技术路线被颠覆、管理层丑闻
+  
+  操作：
+  - 当日清仓，不恋战
+  - 记录清仓原因到 thesis 更新日志
+  - 标的从 thesis-tracker 移至观察列表或直接移除
+
+  逃生后纪律：
+  - 清仓后至少等待 1 个完整交易周再评估是否重新入场
+  - 重新入场需要：新 thesis 重建 + SMAM CMS 回升至 Q2 以上
+  - 同标的 30 天内不再追入（避免情绪化反复）
+
+  评分调整：
+  - 黄色警报：sentiment_score -10
+  - 橙色警报：sentiment_score -21（直接进入卖出区域）
+  - 红色警报：sentiment_score -30 + operation_advice = SELL
