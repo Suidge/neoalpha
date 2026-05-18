@@ -107,6 +107,16 @@ SYMBOL_NAME_FALLBACKS = {
 }
 
 
+def canonical_symbol(symbol: str) -> str:
+    """Normalize strategy symbols to Longbridge quote symbols."""
+    if symbol.startswith("."):
+        return symbol
+    dotted = "." + symbol
+    if dotted in SYMBOL_NAME_FALLBACKS:
+        return dotted
+    return symbol
+
+
 def run(cmd: List[str], timeout: int = 35) -> Tuple[int, str, str]:
     try:
         p = subprocess.run(cmd, cwd=str(ROOT), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
@@ -131,12 +141,17 @@ def safe_longbridge_json(args: List[str], timeout: int = 35) -> Any:
 
 def quote(symbols: Iterable[str]) -> Dict[str, Dict[str, Any]]:
     unique = []
+    aliases: Dict[str, str] = {}
     seen = set()
     for s in symbols:
-        if not s or s in seen:
+        if not s:
             continue
-        seen.add(s)
-        unique.append(s)
+        canonical = canonical_symbol(s)
+        aliases[s] = canonical
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        unique.append(canonical)
     if not unique:
         return {}
     data = longbridge_json(["quote", *unique], timeout=45)
@@ -148,6 +163,9 @@ def quote(symbols: Iterable[str]) -> Dict[str, Dict[str, Any]]:
     for row in rows or []:
         if isinstance(row, dict) and row.get("symbol"):
             out[row["symbol"]] = row
+    for original, canonical in aliases.items():
+        if original != canonical and canonical in out:
+            out[original] = out[canonical]
     return out
 
 
@@ -237,6 +255,17 @@ def symbol_name(symbol: str, row: Optional[Dict[str, Any]] = None, monitor: Opti
 def display_symbol(symbol: str, row: Optional[Dict[str, Any]] = None, monitor: Optional[Dict[str, Any]] = None) -> str:
     name = symbol_name(symbol, row, monitor)
     return f"{symbol} {name}" if name else symbol
+
+
+def trigger_level(trigger: Dict[str, Any]) -> Optional[float]:
+    value = trigger.get("level", trigger.get("value"))
+    if value is None:
+        return None
+    return float(value)
+
+
+def trigger_reason(trigger: Dict[str, Any], fallback: str) -> str:
+    return str(trigger.get("reason") or trigger.get("action") or fallback)
 
 
 def brief_quote_line(label: str, row: Dict[str, Any]) -> str:
@@ -447,8 +476,10 @@ def evaluate(row: Dict[str, Any], triggers: List[Dict[str, Any]]) -> List[str]:
     chg = pct(row)
     for tr in triggers:
         typ = tr.get("type")
-        level = tr.get("level")
-        reason = tr.get("reason", typ)
+        level = trigger_level(tr)
+        if level is None:
+            continue
+        reason = trigger_reason(tr, str(typ))
         if typ == "pct_change_abs_gte" and chg is not None and abs(chg) >= float(level):
             hits.append(f"{reason}: 涨跌幅 {chg:+.2f}% ≥ ±{level}%")
         elif typ == "pct_change_above" and chg is not None and chg >= float(level):
@@ -504,30 +535,30 @@ def evaluate_details(row: Dict[str, Any], triggers: List[Dict[str, Any]]) -> Lis
     chg = pct(row)
     for idx, tr in enumerate(triggers):
         typ = tr.get("type")
-        if tr.get("level") is None:
+        level = trigger_level(tr)
+        if level is None:
             continue
-        level = float(tr.get("level"))
-        reason = str(tr.get("reason") or typ or f"trigger_{idx}")
+        reason = trigger_reason(tr, str(typ or f"trigger_{idx}"))
         message = None
         distance = None
         if typ == "pct_change_abs_gte" and chg is not None and abs(chg) >= level:
-            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≥ ±{tr.get('level')}%"
+            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≥ ±{level:g}%"
             distance = abs(chg)
         elif typ == "pct_change_above" and chg is not None and chg >= level:
-            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≥ {tr.get('level')}%"
+            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≥ {level:g}%"
             distance = chg
         elif typ == "pct_change_below" and chg is not None and chg <= level:
-            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≤ {tr.get('level')}%"
+            message = f"{reason}: 涨跌幅 {chg:+.2f}% ≤ {level:g}%"
             distance = abs(chg)
         elif typ == "price_above" and last is not None and last >= level:
-            message = f"{reason}: 现价 {last} ≥ {tr.get('level')}"
+            message = f"{reason}: 现价 {last} ≥ {level:g}"
             distance = abs(last / level - 1) * 100 if level else 0
         elif typ == "price_below" and last is not None and last <= level:
-            message = f"{reason}: 现价 {last} ≤ {tr.get('level')}"
+            message = f"{reason}: 现价 {last} ≤ {level:g}"
             distance = abs(last / level - 1) * 100 if level else 0
         if message:
             details.append({
-                "key": f"{typ}:{reason}:{tr.get('level')}",
+                "key": f"{typ}:{reason}:{level:g}",
                 "reason": reason,
                 "message": message,
                 "severity": trigger_severity(tr),
@@ -561,10 +592,10 @@ def next_watch(row: Dict[str, Any], triggers: List[Dict[str, Any]]) -> str:
     candidates = []
     for tr in triggers:
         typ = tr.get("type")
-        if tr.get("level") is None:
+        level = trigger_level(tr)
+        if level is None:
             continue
-        level = float(tr.get("level"))
-        reason = str(tr.get("reason") or typ)
+        reason = trigger_reason(tr, str(typ))
         if typ.startswith("pct_change") and chg is not None and abs(abs(chg) - abs(level)) > 0.01:
             candidates.append((abs(abs(chg) - abs(level)), f"{reason} {level:g}%"))
         elif typ.startswith("price") and last is not None and level:
@@ -830,6 +861,10 @@ def live_check(market: str) -> str:
     for m in monitors:
         sym = m["symbol"]
         row = quotes.get(sym)
+        # Normalize: strategy files may use dotless index symbols (SPX.US),
+        # but Longbridge returns dotted (.SPX.US) and quote_core keys them that way.
+        if not row and not sym.startswith("."):
+            row = quotes.get("." + sym)
         sym_state = state["alerts"].setdefault(sym, {"hits": {}, "events": []})
         label = display_symbol(sym, row, m)
         if not row:
