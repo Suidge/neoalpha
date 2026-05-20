@@ -181,7 +181,7 @@ NVDA    0.44    0.48    0.42    0.39    1.00
 
 ### 6.1 盘前策略中的应用
 
-在 `proactive_trader.py` 的 premarket pack 中增加 `correlation_context` 字段：
+在 `market_strategy_engine.py` 的 premarket pack 中增加 `correlation_context` 字段：
 
 ```python
 def build_correlation_context(symbols):

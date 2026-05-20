@@ -14,6 +14,8 @@
 
 若用户没有明确 IPS/目标配置，先用当前策略文件或用户偏好作为临时基准，并标记 `[ASSUMPTION]`。
 
+持仓输入优先使用 `memory/strategies/portfolio/positions-current.json`。不要从 `positions-tracker.md` 反推仓位，后者只是脚本生成的阅读版。
+
 | 维度 | 示例 |
 |------|------|
 | 市场 | US / HK / A股 / Cash |

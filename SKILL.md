@@ -21,7 +21,8 @@ description: Analyze stocks, build investment theses, run momentum scans, and ex
 2. **先路由再编排** — 本技能覆盖全面，但具体数据获取优先 Longbridge 和 sibling skills
 3. **三情景输出** — DCF/LBO/财报前瞻必须提供 Bear / Base / Bull
 4. **四条底线**: 先事实后推断 / 先验证后判断 / 先风控后收益 / 盈亏比量化
-5. **SMAM 优先**: 盘前策略必须融入 SMAM 动量扫描结果
+5. **Preset 选股器优先**: 盘前策略必须融入短线/中长线选股器结果；短线选股器内部已包含 SMAM
+6. **盘中主线是市场观察**: premarket 必须产出 `market_watch`，live 必须优先验证市场假设、恐慌/risk 状态、板块轮动和动量变化；个股触发器是证据层
 
 ## Quick Reference
 
@@ -51,13 +52,15 @@ description: Analyze stocks, build investment theses, run momentum scans, and ex
 | "模型审计 / debug model / QA spreadsheet" | B6-A | [references/model-audit.md](references/model-audit.md) |
 | "unit economics / ARR / NDR / LTV:CAC" | B6-B | [references/unit-economics.md](references/unit-economics.md) |
 | "IRR / MOIC / returns analysis" | B6-C | [references/returns-analysis.md](references/returns-analysis.md) |
-| 动量扫描脚本用法 | B6-S | `scripts/momentum_scanner.py --help` |
-| 财报前瞻脚本 | B7-S | `scripts/earnings_preview.py <SYMBOL> --output text` |
-| 财报复盘脚本 | B7-S | `scripts/earnings_recap.py <SYMBOL> --output text` |
+| 动量扫描脚本用法 | B6-S | `scripts/screen_momentum.py --help` |
+| preset 选股器 / 短线选股 / 中长线选股 | B6-T | `scripts/screen_stocks.py --help` |
+| 财报前瞻脚本 | B7-S | `scripts/analyze_earnings_preview.py <SYMBOL> --output text` |
+| 财报复盘脚本 | B7-S | `scripts/analyze_earnings_recap.py <SYMBOL> --output text` |
 | 策略 YAML 库 | B7 | [strategies/](strategies/) |
 | "组合监控 / portfolio review" | D1 | [references/portfolio-monitoring.md](references/portfolio-monitoring.md) |
 | "再平衡 / portfolio drift" | D2 | [references/portfolio-rebalance.md](references/portfolio-rebalance.md) |
 | "税损收割 / TLH" | D3 | [references/tax-loss-harvesting.md](references/tax-loss-harvesting.md) |
+| "14.49买进1000股POET" / "12.55止损了1000股POET" / 仓位变动描述 | D4 | `scripts/portfolio_ledger.py record "<描述>"` |
 | Excel 颜色/公式规范 | C1 | [references/excel-conventions.md](references/excel-conventions.md) |
 | Excel 文件生成工具链 | C2 | [references/excel-toolchain.md](references/excel-toolchain.md) |
 
@@ -72,9 +75,23 @@ description: Analyze stocks, build investment theses, run momentum scans, and ex
 
 - thesis 文件 → `skills/investment-system/thesis-tracker/<SYMBOL>.<MARKET>.md`
 - 每日策略 → `memory/strategies/{us,hk}-daily.md`
-- 持仓记录 → `memory/strategies/positions-tracker.md`
+- 盘前市场观察剧本 → `{us,hk}-daily.md` 机器可读 JSON 的 `market_watch`
+- 持仓交易流水 → `memory/strategies/portfolio/transactions.csv`（唯一事实来源）
+- 持仓快照 → `memory/strategies/portfolio/positions-current.json`（脚本生成）
+- 持仓阅读版 → `memory/strategies/positions-tracker.md`（脚本生成，兼容旧 cron 路径）
 - 盘前 owner prompt → `memory/strategies/{us,hk}-premarket-prompt.md`
 - 策略 YAML → `skills/investment-system/strategies/*.yaml`
+- 选股器 preset → `skills/investment-system/presets/*.json`
+
+## Position Ledger Protocol
+
+当主人用自然语言描述仓位变化时（如“14.49买进1000股POET”、“卖出500股BABA 140”、“12.55止损了1000股POET”），不要写 daily memory，也不要手工编辑当前仓位表。必须运行：
+
+```bash
+python3 skills/investment-system/scripts/portfolio_ledger.py record "<主人原话>"
+```
+
+脚本会追加 `portfolio/transactions.csv`，并自动重建 `portfolio/positions-current.json` 与 `positions-tracker.md`。若脚本无法识别价格、股数、方向或标的，先向主人确认缺失字段。
 
 ## Related Sibling Skills
 

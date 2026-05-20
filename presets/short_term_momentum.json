@@ -1,0 +1,36 @@
+{
+  "name": "short_term_momentum",
+  "label": "短线动量选股器",
+  "horizon": "1-4 weeks",
+  "description": "以 SMAM 动量为主，结合题材、板块热度、成交确认和短期催化剂，筛出适合盘中监控或试仓的候选。",
+  "concept_keywords": [
+    "AI",
+    "人工智能",
+    "算力",
+    "数据中心",
+    "电力",
+    "核能",
+    "半导体",
+    "硅光",
+    "光通讯",
+    "机器人",
+    "出海",
+    "稀土",
+    "政策",
+    "并购",
+    "重组"
+  ],
+  "components": [
+    {"name": "momentum", "weight": 45},
+    {"name": "concept_strength", "weight": 25},
+    {"name": "liquidity_volume", "weight": 15},
+    {"name": "catalyst", "weight": 10},
+    {"name": "risk_penalty", "weight": -15}
+  ],
+  "actions": [
+    {"min_score": 80, "label": "Strong Watch", "next_step": "加入盘中监控，等待突破、回踩或事件确认"},
+    {"min_score": 65, "label": "Setup Watch", "next_step": "保留在短线观察池，等待形态或量能确认"},
+    {"min_score": 50, "label": "Theme Lead", "next_step": "只作为题材线索，不直接交易"},
+    {"min_score": 0, "label": "Avoid Chase", "next_step": "动量或风险结构不够好，暂不追"}
+  ]
+}

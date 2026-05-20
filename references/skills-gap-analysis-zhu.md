@@ -155,7 +155,7 @@ instructions: |
 
 ### 建议 4：增强 Close Review → 大盘复盘 🏆 中优先级
 
-**做什么**：在 `proactive_trader.py` 的 `close_review()` 中增加全局市场复盘段落（指数表现、板块轮动、资金流向、情绪温度），不只输出逐标的触发回顾。
+**做什么**：在 `market_strategy_engine.py` 的 `close_review()` 中增加全局市场复盘段落（指数表现、板块轮动、资金流向、情绪温度），不只输出逐标的触发回顾。
 
 ### 建议 5：多格式策略输出（可选）⭐ 低优先级
 
@@ -188,7 +188,7 @@ instructions: |
 
 **现在不适合执行的理由**：
 1. 盘前/盘中/盘后 cron jobs 依赖当前文件路径
-2. 数据包脚本（market_us_pack.py / market_hk_pack.py）依赖 proactive-trader 路径
+2. 数据包脚本（build_us_premarket_pack.py / build_hk_premarket_pack.py）依赖 proactive-trader 路径
 3. 合并需要同时迁移 15+ 个 cron job 的引用
 4. 今晚的 SMAM 集成刚生效，合并引入的变动风险不值得
 5. 两个技能都在正常运行，没有阻塞性问题
@@ -208,6 +208,6 @@ instructions: |
 | 1 | ⬜ 升级盘前策略模板为四段式 | cron/market-*-premarket.md | 🏆 P0 |
 | 2 | ⬜ 创建策略 YAML 库（3-5 个核心策略） | strategies/*.yaml | 🏆 P1 |
 | 3 | ⬜ Thesis 模板增加 Battle Plan 四点狙击 | templates/thesis-template.md | 🏆 P1 |
-| 4 | ⬜ Close review 增加大盘复盘段 | proactive_trader.py close_review() | 🏆 P2 |
+| 4 | ⬜ Close review 增加大盘复盘段 | market_strategy_engine.py close_review() | 🏆 P2 |
 | 5 | ⬜ 两技能间增加交叉引用 | financial/SKILL.md, proactive-trader/SKILL.md | P2 |
 | 6 | ⬜ 计划合并窗口（需 cron 暂停） | — | P3 |

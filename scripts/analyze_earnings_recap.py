@@ -6,11 +6,11 @@ Covers actual vs estimated numbers, surprise magnitude, stock price reaction,
 and financial context.
 
 Usage:
-  python3 earnings_recap.py <SYMBOL> [--output json|text]
+  python3 analyze_earnings_recap.py <SYMBOL> [--output json|text]
 
 Example:
-  python3 earnings_recap.py AAPL.US --output json
-  python3 earnings_recap.py 700.HK --output text
+  python3 analyze_earnings_recap.py AAPL.US --output json
+  python3 analyze_earnings_recap.py 700.HK --output text
 """
 from __future__ import annotations
 

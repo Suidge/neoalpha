@@ -5,16 +5,16 @@ Stock Momentum Scanner — 基于 Asness, Moskowitz & Pedersen (2013)
 
 用法:
     # 批量扫描 watchlist 动量
-    python3 momentum_scanner.py --symbols 300394.SZ,300502.SZ,300308.SZ,300054.SZ
+    python3 screen_momentum.py --symbols 300394.SZ,300502.SZ,300308.SZ,300054.SZ
 
     # 带 PE 估值分位的综合 VM 分数
-    python3 momentum_scanner.py --symbols 300394.SZ,300502.SZ --with-value
+    python3 screen_momentum.py --symbols 300394.SZ,300502.SZ --with-value
 
     # 扫描 thesis tracker 所有标的
-    python3 momentum_scanner.py --from-thesis
+    python3 screen_momentum.py --from-thesis
 
     # JSON 输出
-    python3 momentum_scanner.py --symbols AAPL.US,MSFT.US --json
+    python3 screen_momentum.py --symbols AAPL.US,MSFT.US --json
 
 依赖:
     - longbridge CLI（已安装并认证）

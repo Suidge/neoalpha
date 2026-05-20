@@ -1,7 +1,7 @@
 # Earnings Preview — 财报前瞻
 
 > 用于财报发布前的情景分析，与 earnings-workflow（财报后分析）互补
-> **自动化脚本**: `scripts/earnings_preview.py` — 一键获取结构化数据
+> **自动化脚本**: `scripts/analyze_earnings_preview.py` — 一键获取结构化数据
 
 ## 触发
 
@@ -12,7 +12,7 @@
 ### Step 0: 自动化数据获取（优先）
 
 ```bash
-python3 skills/investment-system/scripts/earnings_preview.py <SYMBOL> --output text
+python3 skills/investment-system/scripts/analyze_earnings_preview.py <SYMBOL> --output text
 ```
 
 脚本自动获取：一致预期、EPS 预测、近期财务、估值、财报日历。

@@ -32,20 +32,19 @@ cp -r investment-system/ ~/.openclaw/workspace/skills/
 The skill writes daily strategies and live state to `memory/strategies/`:
 
 ```bash
-mkdir -p ~/.openclaw/workspace/memory/strategies/
+mkdir -p ~/.openclaw/workspace/memory/strategies/portfolio
 ```
 
-### 3. (Optional) Set up optional prompt and positions files
+### 3. (Optional) Set up optional prompt and portfolio files
 
 Copy templates to the runtime directory:
 
 ```bash
 cp skills/investment-system/templates/us-premarket-prompt.example.md memory/strategies/us-premarket-prompt.md
 cp skills/investment-system/templates/hk-premarket-prompt.example.md memory/strategies/hk-premarket-prompt.md
-cp skills/investment-system/templates/positions-tracker.example.md memory/strategies/positions-tracker.md
 ```
 
-Edit each template to match your actual holdings and focus areas. These files are read by the premarket cron to inject owner guidance into strategy generation. If any file is missing or empty, the system silently skips it.
+Edit prompt templates to match your current focus areas. Portfolio positions are managed through the ledger helper, not by manually editing `positions-tracker.md`.
 
 ### 4. Create your thesis tracker
 
@@ -56,7 +55,7 @@ cp skills/investment-system/templates/thesis-template.md skills/investment-syste
 # Edit AAPL.US.md with your thesis
 ```
 
-The premarket cron automatically discovers all `*.US.md` / `*.HK.md` files in the thesis-tracker and includes them in the daily strategy.
+The premarket cron automatically discovers `*.US.md` files for US strategy. HK strategy discovers `*.HK.md` plus same-session A-share `*.SZ.md` / `*.SH.md` files and includes A-share index observations in `market_watch`.
 
 ## Cron Job Setup
 
@@ -100,7 +99,7 @@ openclaw cron add '{
 
 ```bash
 cd ~/.openclaw/workspace
-python3 skills/investment-system/scripts/market_us_pack.py | python3 -m json.tool | head -40
+python3 skills/investment-system/scripts/build_us_premarket_pack.py | python3 -m json.tool | head -40
 ```
 
 Expected: JSON with `market`, `date`, `index_quotes`, `monitors`, `news_titles` fields.
@@ -121,7 +120,7 @@ Check output:
 
 ```bash
 cd ~/.openclaw/workspace
-python3 skills/investment-system/scripts/market_us_live.py
+python3 skills/investment-system/scripts/run_us_live_check.py
 ```
 
 Expected: `NO_REPLY` (no triggers hit) or incremental alert.
@@ -143,17 +142,34 @@ Each thesis file in `thesis-tracker/` follows the template at `templates/thesis-
 
 Files `memory/strategies/us-premarket-prompt.md` and `memory/strategies/hk-premarket-prompt.md` contain owner-authored guidance injected into the premarket data pack. Edit these to add today-specific focus areas. The system reads them fresh each day (no archiving needed).
 
+Premarket strategy JSON must include `market_watch` before `monitors[]`. `market_watch` is the live cron's main plan: market thesis, regime hypotheses, benchmark/cross-asset triggers, sector rotation, and momentum regime. Live cron evaluates this first and only then evaluates individual stock monitors.
+
 ### Positions tracker
 
-File `memory/strategies/positions-tracker.md` records non-Longbridge holdings. The premarket cron automatically extracts relevant holdings by market suffix (`.US` / `.HK`) and includes them in strategy generation.
+Portfolio files use ledger-first storage:
+
+```text
+memory/strategies/portfolio/transactions.csv
+memory/strategies/portfolio/instruments.yaml
+memory/strategies/portfolio/positions-current.json
+memory/strategies/positions-tracker.md
+```
+
+Only `transactions.csv` is the source of truth. Record natural-language trade descriptions with:
+
+```bash
+python3 skills/investment-system/scripts/portfolio_ledger.py record "14.49买进1000股POET"
+```
+
+The helper rebuilds `positions-current.json` for premarket cron and regenerates `positions-tracker.md` as a human-readable compatibility file.
 
 ## Troubleshooting
 
 | Problem | Check |
 |---------|-------|
 | "Longbridge quote 无返回" | Verify `longbridge` CLI works: `longbridge quote AAPL.US` |
-| Premarket cron fails silently | Check the data pack output: `python3 skills/investment-system/scripts/market_us_pack.py` |
-| Strategy file has bare tickers (no `.US`) | Run `python3 skills/investment-system/scripts/market_us_validate.py` — validation catches suffix errors |
+| Premarket cron fails silently | Check the data pack output: `python3 skills/investment-system/scripts/build_us_premarket_pack.py` |
+| Strategy file has bare tickers (no `.US`) | Run `python3 skills/investment-system/scripts/validate_us_strategy.py` — validation catches suffix errors |
 | Live cron times out | Increase `timeoutSeconds` on the cron job (recommended: 240s for live) |
 | Strategy appears stale | Confirm `memory/strategies/us-daily.md` has today's date in the JSON block |
 | Thesis tracker not included | Verify file naming: must be `{SYMBOL}.US.md` or `{SYMBOL}.HK.md` in `thesis-tracker/` |
@@ -175,16 +191,18 @@ workspace/
 │   │   ├── market-hk-close.md
 │   │   └── market-hk-session-reset.md
 │   ├── scripts/                         # Python helpers
-│   │   ├── proactive_trader.py
-│   │   ├── momentum_scanner.py
+│   │   ├── market_strategy_engine.py
+│   │   ├── portfolio_ledger.py
+│   │   ├── screen_momentum.py
+│   │   ├── screen_stocks.py
 │   │   ├── build_dcf_model.py
 │   │   ├── validate_dcf.py
-│   │   ├── earnings_preview.py
-│   │   ├── earnings_recap.py
-│   │   ├── market_{us,hk}_pack.py
-│   │   ├── market_{us,hk}_validate.py
-│   │   ├── market_{us,hk}_live.py
-│   │   └── market_{us,hk}_close.py
+│   │   ├── analyze_earnings_preview.py
+│   │   ├── analyze_earnings_recap.py
+│   │   ├── build_{us,hk}_premarket_pack.py
+│   │   ├── validate_{us,hk}_strategy.py
+│   │   ├── run_{us,hk}_live_check.py
+│   │   └── generate_{us,hk}_close_review.py
 │   ├── strategies/                      # Strategy YAML library
 │   ├── templates/                       # User-editable templates
 │   ├── references/                      # Analysis framework references
@@ -195,7 +213,11 @@ workspace/
     ├── hk-daily.md                      # Daily HK strategy
     ├── us-premarket-prompt.md           # Optional owner prompt (US)
     ├── hk-premarket-prompt.md           # Optional owner prompt (HK)
-    ├── positions-tracker.md             # Optional non-Longbridge positions
+    ├── portfolio/
+    │   ├── transactions.csv             # Portfolio ledger source of truth
+    │   ├── instruments.yaml             # Instrument metadata
+    │   └── positions-current.json       # Generated position snapshot
+    ├── positions-tracker.md             # Generated readable compatibility file
     └── us-live-state-YYYY-MM-DD.json    # Runtime alert dedupe
 ```
 

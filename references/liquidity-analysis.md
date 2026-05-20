@@ -265,7 +265,7 @@ def liquidity_score(symbol):
 
 ### 5.1 盘前策略中的应用
 
-在 `proactive_trader.py` 的 premarket pack 中增加 `liquidity_context` 字段：
+在 `market_strategy_engine.py` 的 premarket pack 中增加 `liquidity_context` 字段：
 
 ```python
 def build_liquidity_context(symbols):

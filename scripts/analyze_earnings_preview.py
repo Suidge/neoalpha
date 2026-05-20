@@ -6,11 +6,11 @@ Produces structured JSON with consensus estimates, beat/miss history,
 analyst sentiment, and financial context.
 
 Usage:
-  python3 earnings_preview.py <SYMBOL> [--output json|text]
+  python3 analyze_earnings_preview.py <SYMBOL> [--output json|text]
 
 Example:
-  python3 earnings_preview.py AAPL.US --output json
-  python3 earnings_preview.py 700.HK --output text
+  python3 analyze_earnings_preview.py AAPL.US --output json
+  python3 analyze_earnings_preview.py 700.HK --output text
 """
 from __future__ import annotations
 

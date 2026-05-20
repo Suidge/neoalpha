@@ -6,5 +6,5 @@ openpyxl>=3.1.0
 # Momentum scanner and other analysis scripts have no external dependencies
 # beyond Python 3.10+ stdlib (json, subprocess, math, datetime, argparse, etc.)
 #
-# Optional (for enhanced statistical precision in momentum_scanner.py):
+# Optional (for enhanced statistical precision in screen_momentum.py):
 # numpy>=1.24.0

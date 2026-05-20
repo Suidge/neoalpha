@@ -1,24 +1,24 @@
 # Earnings Integration — 财报分析整合流程
 
-> **自动化脚本**: `scripts/earnings_preview.py`（财报前瞻）和 `scripts/earnings_recap.py`（财报复盘）
+> **自动化脚本**: `scripts/analyze_earnings_preview.py`（财报前瞻）和 `scripts/analyze_earnings_recap.py`（财报复盘）
 > 优先使用脚本获取结构化数据，再结合本框架进行人工分析
 
 ## Phase 0: 自动化数据获取
 
 ### 财报前瞻
 ```bash
-python3 skills/investment-system/scripts/earnings_preview.py <SYMBOL> --output text
+python3 skills/investment-system/scripts/analyze_earnings_preview.py <SYMBOL> --output text
 ```
 返回结构化数据：一致预期、EPS 预测、近期财务、估值、财报日历
 
 ### 财报复盘
 ```bash
-python3 skills/investment-system/scripts/earnings_recap.py <SYMBOL> --output text
+python3 skills/investment-system/scripts/analyze_earnings_recap.py <SYMBOL> --output text
 ```
 返回结构化数据：实际 vs 预期、营收/利润趋势、毛利率趋势、价格反应
 
 ### 数据源优先级
-1. `earnings_preview.py` / `earnings_recap.py`（Longbridge CLI 自动化）
+1. `analyze_earnings_preview.py` / `analyze_earnings_recap.py`（Longbridge CLI 自动化）
 2. Longbridge 直接命令（`consensus`、`forecast-eps`、`financial-report`）
 3. web_search 补充（call transcript、管理层指引细节）
 

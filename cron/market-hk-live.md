@@ -7,10 +7,18 @@
 - 当前 cron run 内完成，禁止 spawn/subagent
 - 工具静默，禁止输出过程
 - 默认 `NO_REPLY`；首次触发、级别升级、价格/涨跌幅显著扩大或数据质量异常时输出详细增量警报；已报警条件再次命中时只输出一行简报
+- 盘中输出优先级：`market_watch` 市场假设验证/证伪 > 港股/A股指数联动或背离 > 板块轮动/动量扩散 > 个股触发器
+- 个股波动必须尽量解释为港股+A股市场观察证据；不要把单票涨跌当作主菜
 
 ## 执行说明
 
-执行无参数 wrapper：`skills/investment-system/scripts/market_hk_live.py`。
+执行无参数 wrapper：`skills/investment-system/scripts/run_hk_live_check.py`。
+
+wrapper 会读取当日 `memory/strategies/hk-daily.md` 的机器可读策略：
+- `market_watch`: 港股+A股市场主假设、risk-on/risk-off/恐慌/轮动/震荡观察、港股/A股指数触发器
+- `monitors`: 个股/持仓触发器，允许 `.HK/.SZ/.SH`
+
+若 `market_watch` 存在，首次盘中 run 会输出一次市场假设跟踪快照；之后只在市场观察触发、级别升级或偏离扩大时输出。
 
 ## 输出规则
 

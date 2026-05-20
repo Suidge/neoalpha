@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic Proactive Trader cron helper.
+"""Market strategy engine for investment-system cron workflows.
 
 Subcommands:
   premarket --market US|HK  Generate a structured daily strategy markdown file.
@@ -24,7 +24,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 ROOT = Path(__file__).resolve().parents[3]
 SKILL = ROOT / "skills" / "investment-system"
 THESIS_DIR = SKILL / "thesis-tracker"
-SMAM_SCANNER = SKILL / "scripts" / "momentum_scanner.py"
+STOCK_SCREENER = SKILL / "scripts" / "screen_stocks.py"
 STRATEGY_DIR = ROOT / "memory" / "strategies"
 ASSETS_FILE = SKILL / "tracking" / "us-market-assets.md"
 PREMARKET_PROMPT_PATHS = {
@@ -32,6 +32,7 @@ PREMARKET_PROMPT_PATHS = {
     "HK": STRATEGY_DIR / "hk-premarket-prompt.md",
 }
 POSITIONS_TRACKER = STRATEGY_DIR / "positions-tracker.md"
+POSITIONS_CURRENT = STRATEGY_DIR / "portfolio" / "positions-current.json"
 TZ = dt.timezone(dt.timedelta(hours=8))
 TODAY = dt.datetime.now(TZ).date().isoformat()
 MARKET_TZ = {"US": ZoneInfo("America/New_York"), "HK": ZoneInfo("Asia/Hong_Kong")}
@@ -46,6 +47,7 @@ def market_today(market: str) -> str:
 MARKET_CONFIG = {
     "US": {
         "suffix": ".US",
+        "strategy_suffixes": [".US"],
         "strategy": STRATEGY_DIR / "us-daily.md",
         "quote_core": [".SPX.US", ".IXIC.US", ".DJI.US", ".VIX.US", "SPY.US", "QQQ.US", "TLT.US", "UUP.US", "EEM.US", "FXI.US", "IBIT.US"],
         "index_symbols": [".SPX.US", ".IXIC.US", ".DJI.US", ".VIX.US"],
@@ -56,9 +58,10 @@ MARKET_CONFIG = {
     },
     "HK": {
         "suffix": ".HK",
+        "strategy_suffixes": [".HK", ".SZ", ".SH"],
         "strategy": STRATEGY_DIR / "hk-daily.md",
-        "quote_core": ["HSTECH.HK", "700.HK", "9988.HK", "3690.HK", "1810.HK", "2228.HK", "7226.HK"],
-        "index_symbols": ["HSTECH.HK"],
+        "quote_core": ["HSTECH.HK", "000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "700.HK", "9988.HK", "3690.HK", "1810.HK", "2228.HK", "7226.HK"],
+        "index_symbols": ["HSTECH.HK", "000001.SH", "399001.SZ", "399006.SZ", "000300.SH"],
         "default_symbols": ["700.HK", "9988.HK", "3690.HK", "1810.HK", "2228.HK", "7226.HK"],
         "market_code": "HK",
         "title": "HK Market Strategy",
@@ -98,6 +101,10 @@ SYMBOL_NAME_FALLBACKS = {
     "SLV.US": "白银ETF",
     "USO.US": "美国原油基金",
     "HSTECH.HK": "恒生科技指数",
+    "000001.SH": "上证指数",
+    "399001.SZ": "深证成指",
+    "399006.SZ": "创业板指",
+    "000300.SH": "沪深300",
     "700.HK": "腾讯控股",
     "9988.HK": "阿里巴巴-W",
     "3690.HK": "美团-W",
@@ -208,6 +215,13 @@ def compact_text(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + f"\n...[truncated to {limit} chars]"
+
+
+def relpath(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
 
 
 def prune_empty(value: Any) -> Any:
@@ -351,55 +365,61 @@ def macro_events(market: str) -> List[Dict[str, Any]]:
     return events
 
 
+def market_suffixes(market: str) -> List[str]:
+    return list(MARKET_CONFIG[market].get("strategy_suffixes") or [MARKET_CONFIG[market]["suffix"]])
+
+
 def thesis_symbols(market: str) -> List[str]:
-    suffix = MARKET_CONFIG[market]["suffix"]
-    return sorted(p.stem for p in THESIS_DIR.glob(f"*{suffix}.md"))
+    symbols = []
+    for suffix in market_suffixes(market):
+        symbols.extend(p.stem for p in THESIS_DIR.glob(f"*{suffix}.md"))
+    return sorted(set(symbols))
 
 
-def smam_symbols(market: str) -> List[str]:
-    """Collect momentum-scan symbols: thesis + positions-tracker for the given market.
-    For HK market, also include A-share (.SZ/.SH) thesis symbols."""
-    suffix = MARKET_CONFIG[market]["suffix"]
-    thesis_syms = sorted(p.stem for p in THESIS_DIR.glob(f"*{suffix}.md"))
-    a_share_syms = []
-    if market == "HK":
-        for sfx in (".SZ", ".SH"):
-            a_share_syms.extend(sorted(p.stem for p in THESIS_DIR.glob(f"*{sfx}.md")))
-    pt = load_positions_tracker(market)
-    position_syms = pt.get("symbols", []) if pt.get("present") else []
-    return sorted(set(thesis_syms + a_share_syms + position_syms))
-
-
-def run_smam_scan(symbols: List[str]) -> Dict[str, Any]:
-    """Run SMAM momentum scanner on the given symbols. Returns compact results or error."""
-    if not symbols or not SMAM_SCANNER.exists():
-        return {"error": "SMAM scanner unavailable", "results": []}
-    if len(symbols) > 30:
-        symbols = symbols[:30]
-    syms_arg = ",".join(symbols)
-    code, out, err = run(
-        ["python3", str(SMAM_SCANNER), "--symbols", syms_arg, "--json", "--with-value"],
-        timeout=120
-    )
-    if code != 0 or not out:
-        return {"error": err or f"exit {code}", "results": []}
+def run_stock_screen(symbols: List[str], preset: str, top: int = 10) -> Dict[str, Any]:
+    """Run preset stock screener on thesis symbols."""
+    if not symbols or not STOCK_SCREENER.exists():
+        return {"error": "stock screener unavailable", "results": []}
+    syms_arg = ",".join(symbols[:30])
     try:
+        code, out, err = run(
+            [
+                "python3",
+                str(STOCK_SCREENER),
+                "--symbols",
+                syms_arg,
+                "--preset",
+                preset,
+                "--top",
+                str(top),
+                "--json",
+            ],
+            timeout=60,
+        )
+        if code != 0 or not out:
+            return {"error": err or f"exit {code}", "results": []}
         data = json.loads(out)
-        results = data.get("results", [])
-        compact = []
-        for r in results[:20]:
-            compact.append({
+        preset_meta = data.get("preset") or {}
+        results = []
+        for r in (data.get("results") or [])[:top]:
+            results.append({
                 "symbol": r.get("symbol"),
+                "score": r.get("score"),
+                "action": r.get("action"),
+                "next_step": r.get("next_step"),
                 "cms": r.get("cms"),
                 "quintile": r.get("quintile"),
-                "stability": r.get("stability"),
-                "vam": r.get("vam"),
                 "vm_score": r.get("vm_score"),
-                "pe_rank": r.get("pe_rank"),
-                "mom_12_1_pct": r.get("signals", {}).get("MOM_12_1"),
-                "action": r.get("level"),
+                "components": r.get("components", [])[:4],
             })
-        return {"scanned": len(results), "total_symbols": len(symbols), "results": compact}
+        return {
+            "preset": preset_meta.get("name") or preset,
+            "label": preset_meta.get("label") or preset,
+            "horizon": preset_meta.get("horizon"),
+            "description": preset_meta.get("description"),
+            "scanned_symbols": symbols[:30],
+            "results": results,
+        }
     except Exception as e:
         return {"error": str(e), "results": []}
 
@@ -417,8 +437,8 @@ def thesis_summary(symbol: str, max_chars: int = 120) -> str:
 
 
 def extract_symbols_from_strategy(text: str, market: str) -> List[str]:
-    suffix = re.escape(MARKET_CONFIG[market]["suffix"])
-    return sorted(set(re.findall(rf"\b[A-Z0-9.]+{suffix}\b", text)))
+    suffix = "|".join(re.escape(sfx) for sfx in market_suffixes(market))
+    return sorted(set(re.findall(rf"\b[A-Z0-9.]+(?:{suffix})\b", text)))
 
 
 def load_strategy(path: Path, market: str) -> Tuple[str, Optional[Dict[str, Any]]]:
@@ -567,10 +587,15 @@ def evaluate_details(row: Dict[str, Any], triggers: List[Dict[str, Any]]) -> Lis
     return details
 
 
-def is_incremental_hit(symbol_state: Dict[str, Any], hit: Dict[str, Any], chg: Optional[float]) -> Tuple[bool, str]:
+def is_incremental_hit(symbol_state: Dict[str, Any], hit: Dict[str, Any], chg: Optional[float], price: Optional[float]) -> Tuple[bool, str]:
     prev = symbol_state.get("hits", {}).get(hit["key"])
     if not prev:
         return True, "首次触发"
+    prev_alert_price = qnum(prev, "last_alert_price") or qnum(prev, "last_price")
+    if price is not None and prev_alert_price:
+        price_move = (price / prev_alert_price - 1) * 100
+        if abs(price_move) >= 1.0:
+            return True, f"较上次播报价变化 {price_move:+.2f}%"
     prev_rank = SEVERITY_RANK.get(str(prev.get("severity", "medium")), 2)
     rank = SEVERITY_RANK.get(str(hit.get("severity", "medium")), 2)
     if rank > prev_rank:
@@ -653,7 +678,7 @@ def load_premarket_prompt(market: str) -> Dict[str, Any]:
     if not path.exists():
         return {
             "present": False,
-            "path": str(path.relative_to(ROOT)),
+            "path": relpath(path),
             "content": "",
             "usage": "No owner prompt file found; use market data only.",
         }
@@ -661,7 +686,7 @@ def load_premarket_prompt(market: str) -> Dict[str, Any]:
     compact = compact_text(content, MAX_OWNER_PROMPT_CHARS)
     return {
         "present": bool(content),
-        "path": str(path.relative_to(ROOT)),
+        "path": relpath(path),
         "content": compact,
         "content_chars": len(content),
         "max_chars": MAX_OWNER_PROMPT_CHARS,
@@ -670,19 +695,43 @@ def load_premarket_prompt(market: str) -> Dict[str, Any]:
 
 
 def load_positions_tracker(market: str) -> Dict[str, Any]:
-    """Load optional positions tracker for non-Longbridge holdings."""
+    """Load structured portfolio positions, falling back to legacy Markdown."""
+    suffixes = [MARKET_CONFIG[market]["suffix"]]
+    if market == "HK":
+        suffixes.extend([".SZ", ".SH"])
+    if POSITIONS_CURRENT.exists():
+        try:
+            data = json.loads(POSITIONS_CURRENT.read_text(errors="replace"))
+            positions = [
+                p for p in data.get("positions", [])
+                if isinstance(p, dict) and any(str(p.get("symbol", "")).endswith(sfx) for sfx in suffixes)
+            ]
+        except Exception:
+            positions = []
+        if positions:
+            symbols = sorted({p["symbol"] for p in positions if p.get("symbol")})
+            return {
+                "present": True,
+                "path": relpath(POSITIONS_CURRENT),
+                "legacy_markdown_path": relpath(POSITIONS_TRACKER),
+                "positions": positions,
+                "symbols": symbols,
+                "content": compact_text(json.dumps(positions, ensure_ascii=False), MAX_POSITIONS_TRACKER_CHARS),
+                "generated_at": data.get("generated_at") if isinstance(data, dict) else None,
+                "usage": f"Consider structured {market} holdings ({', '.join(symbols)}) for position-aware strategy and risk sizing.",
+            }
     path = POSITIONS_TRACKER
-    suffix = MARKET_CONFIG[market]["suffix"]
     if not path.exists():
-        return {"present": False, "path": str(path.relative_to(ROOT)), "content": "", "symbols": []}
+        return {"present": False, "path": relpath(path), "content": "", "symbols": []}
     content = path.read_text(errors="replace").strip()
     if not content:
-        return {"present": False, "path": str(path.relative_to(ROOT)), "content": "", "symbols": []}
-    market_symbols = sorted(set(re.findall(rf"\b[A-Z0-9]+{re.escape(suffix)}\b", content)))
+        return {"present": False, "path": relpath(path), "content": "", "symbols": []}
+    pattern = "|".join(re.escape(sfx) for sfx in suffixes)
+    market_symbols = sorted(set(re.findall(rf"\b[A-Z0-9]+(?:{pattern})\b", content)))
     if not market_symbols:
         return {
             "present": False,
-            "path": str(path.relative_to(ROOT)),
+            "path": relpath(path),
             "content": "",
             "content_chars": len(content),
             "symbols": [],
@@ -691,13 +740,139 @@ def load_positions_tracker(market: str) -> Dict[str, Any]:
     compact = compact_text(content, MAX_POSITIONS_TRACKER_CHARS)
     return {
         "present": True,
-        "path": str(path.relative_to(ROOT)),
+        "path": relpath(path),
         "content": compact,
         "content_chars": len(content),
         "max_chars": MAX_POSITIONS_TRACKER_CHARS,
         "symbols": market_symbols,
         "usage": f"Consider listed {market} holdings ({', '.join(market_symbols)}) and key levels from compact content.",
     }
+
+
+def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_screens: Dict[str, Any]) -> Dict[str, Any]:
+    """Create market-level watch scaffolding for the model to refine in the daily strategy."""
+    cfg = MARKET_CONFIG[market]
+    short_results = stock_screens.get("short_term_momentum", {}).get("results", [])
+    long_results = stock_screens.get("long_term_compounder", {}).get("results", [])
+    tactical = [r.get("symbol") for r in short_results if r.get("action") in ("Strong Watch", "Setup Watch") and r.get("symbol")]
+    thesis = [r.get("symbol") for r in long_results if r.get("action") in ("Thesis Candidate", "DCF Candidate") and r.get("symbol")]
+    avoid = [r.get("symbol") for r in short_results if r.get("action") == "Avoid Chase" and r.get("symbol")]
+    benchmarks = []
+    for sym in cfg["index_symbols"]:
+        row = quotes.get(sym)
+        benchmarks.append({
+            "symbol": sym,
+            "name": symbol_name(sym, row),
+            "role": "risk/regime benchmark" if market == "US" else ("A股同段情绪锚" if sym.endswith((".SH", ".SZ")) else "港股科技情绪锚"),
+            "quote": quote_snapshot(row, market),
+            "candidate_trigger_hints": {
+                "pct_change_abs_gte_medium": 1.2 if market == "US" else 1.5,
+                "pct_change_abs_gte_high": 2.0 if market == "US" else 2.5,
+            },
+        })
+    if market == "US":
+        cross_asset = ["SPY.US", "QQQ.US", "TLT.US", "UUP.US", "EEM.US", "FXI.US", "IBIT.US"]
+    else:
+        cross_asset = ["HSTECH.HK", "000001.SH", "399001.SZ", "399006.SZ", "000300.SH", "7226.HK"]
+    return {
+        "required": True,
+        "purpose": "盘中 live 应先跟踪市场状态和盘前假设是否成立，再跟踪个股触发器。",
+        "market_questions": [
+            "今天市场是 risk-on、risk-off、轮动，还是无趋势震荡？",
+            "是否出现恐慌、避险、动量断裂或热点板块切换？",
+            "个股波动背后对应哪条市场假设被验证或证伪？",
+        ],
+        "benchmarks": benchmarks,
+        "cross_asset_symbols": cross_asset,
+        "momentum_regime": {
+            "source": "stock_screens.short_term_momentum and stock_screens.long_term_compounder",
+            "tactical_watch_symbols": tactical[:8],
+            "thesis_candidate_symbols": thesis[:8],
+            "avoid_chase_symbols": avoid[:8],
+            "watch": "盘中优先验证短线选股器高分标的是否继续扩散；若 Avoid Chase 标的领跌或高分标的失效，优先判断动量断裂/风险收缩。",
+        },
+        "strategy_authoring_requirement": {
+            "daily_json_field": "market_watch",
+            "must_include": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime"],
+            "live_priority": "market_watch observations before monitor-level stock alerts",
+        },
+    }
+
+
+def market_watch_symbols(data: Dict[str, Any], market: str) -> List[str]:
+    watch = data.get("market_watch") if isinstance(data, dict) else {}
+    symbols = []
+    for item in (watch or {}).get("benchmarks", []):
+        if isinstance(item, dict) and item.get("symbol"):
+            symbols.append(item["symbol"])
+    for sym in (watch or {}).get("cross_asset_symbols", []):
+        if isinstance(sym, str):
+            symbols.append(sym)
+    for item in (watch or {}).get("sector_rotation", []):
+        if isinstance(item, dict):
+            symbols.extend(s for s in item.get("symbols", []) if isinstance(s, str))
+    symbols.extend(MARKET_CONFIG[market]["index_symbols"])
+    return sorted(set(symbols))
+
+
+def default_market_watch_triggers(symbol: str, market: str) -> List[Dict[str, Any]]:
+    if symbol == ".VIX.US":
+        return [
+            {"type": "price_above", "level": 20.0, "severity": "high", "reason": "恐慌升温/VIX突破20"},
+            {"type": "pct_change_abs_gte", "level": 8.0, "severity": "medium", "reason": "波动率快速变化"},
+        ]
+    if symbol in ("TLT.US", "UUP.US", "IBIT.US"):
+        return [{"type": "pct_change_abs_gte", "level": 1.5, "severity": "medium", "reason": "跨资产信号显著变化"}]
+    return [{"type": "pct_change_abs_gte", "level": 1.5 if market == "US" else 2.0, "severity": "medium", "reason": "市场基准显著波动"}]
+
+
+def evaluate_market_watch(market: str, data: Dict[str, Any], quotes: Dict[str, Dict[str, Any]], state: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    watch = data.get("market_watch") if isinstance(data, dict) else None
+    if not isinstance(watch, dict):
+        return [], []
+    market_state = state.setdefault("market_watch", {"hits": {}, "snapshots": 0})
+    market_state["snapshots"] = int(market_state.get("snapshots") or 0) + 1
+    observations = []
+    repeats = []
+    thesis = re.sub(r"\s+", " ", str(watch.get("thesis") or watch.get("daily_thesis") or "")).strip()
+    if market_state["snapshots"] == 1 and thesis:
+        bench = []
+        for sym in market_watch_symbols(data, market)[:6]:
+            row = quotes.get(sym)
+            if row:
+                bench.append(brief_quote_line(display_symbol(sym, row), row))
+        observations.append("🧭 盘中市场假设跟踪\n" + f"主假设: {thesis}" + (f"\n当前锚点: {' | '.join(bench)}" if bench else ""))
+
+    benchmark_items = watch.get("benchmarks", [])
+    if not isinstance(benchmark_items, list):
+        benchmark_items = []
+    for item in benchmark_items:
+        if not isinstance(item, dict) or not item.get("symbol"):
+            continue
+        sym = item["symbol"]
+        row = quotes.get(sym)
+        if not row:
+            continue
+        triggers = item.get("triggers") if isinstance(item.get("triggers"), list) else default_market_watch_triggers(sym, market)
+        hits = evaluate_details(row, triggers)
+        label = display_symbol(sym, row, item)
+        for hit in hits:
+            key = f"{sym}:{hit['key']}"
+            prev = market_state["hits"].get(key, {})
+            should_alert = not prev or SEVERITY_RANK.get(hit["severity"], 2) > SEVERITY_RANK.get(str(prev.get("severity", "medium")), 2) or float(hit.get("distance") or 0) >= max(float(prev.get("max_distance") or 0) + 0.6, float(prev.get("max_distance") or 0) * 1.2)
+            market_state["hits"][key] = {
+                "message": hit["message"],
+                "severity": hit["severity"],
+                "first_seen_at": prev.get("first_seen_at") or state["last_run_at"],
+                "last_seen_at": state["last_run_at"],
+                "max_distance": max(float(prev.get("max_distance") or 0), float(hit.get("distance") or 0)),
+            }
+            line = f"{label}: {fmt_price(row)}｜{hit['message']}"
+            if should_alert:
+                observations.append("📌 市场观察触发\n" + line + (f"\n关联假设: {thesis}" if thesis else ""))
+            elif prev:
+                repeats.append(line)
+    return observations, repeats
 
 
 def build_premarket_pack(market: str) -> str:
@@ -738,11 +913,13 @@ def build_premarket_pack(market: str) -> str:
             "candidate_trigger_hints": trigger_hints,
         })
 
-    # SMAM momentum scan
-    momentum_symbols = smam_symbols(market)
-    momentum_scan = run_smam_scan(momentum_symbols) if momentum_symbols else {"error": "no symbols to scan", "results": []}
-    momentum_q1 = [r for r in momentum_scan.get("results", []) if r.get("quintile") == "Q1"]
-    momentum_warn = [r for r in momentum_scan.get("results", []) if r.get("quintile") in ("Q4", "Q5")]
+    screen_symbols = thesis_symbols(market)
+    stock_screens = {
+        "short_term_momentum": run_stock_screen(screen_symbols, "short_term_momentum", top=10),
+        "long_term_compounder": run_stock_screen(screen_symbols, "long_term_compounder", top=10),
+        "scanned_symbols": screen_symbols,
+        "usage": "Use short_term_momentum for today's tactical watch/add candidates; use long_term_compounder for thesis/DCF candidate prioritization.",
+    }
 
     pack = {
         "schema_version": 1,
@@ -757,29 +934,20 @@ def build_premarket_pack(market: str) -> str:
         "hk_overnight_us_context": hk_overnight_us_context() if market == "HK" else None,
         "owner_premarket_prompt": load_premarket_prompt(market),
         "positions_tracker": load_positions_tracker(market),
-        "momentum_scan": {
-            "methodology": "Asness, Moskowitz & Pedersen (2013) 12-1 Month Momentum | CMS composite score | VM value-momentum combined",
-            "scanned_symbols": momentum_symbols,
-            **momentum_scan,
-            "momentum_q1_bullish": momentum_q1,
-            "momentum_q4q5_bearish": momentum_warn,
-            "interpretation_guide": {
-                "Q1_strong_add": "CMS>0.84, strong momentum, stability>=0.8 → aggressive add window",
-                "Q2_moderate_add": "CMS +0.25~0.84, positive momentum, stability>=0.6 → moderate add",
-                "Q3_neutral": "CMS -0.25~+0.25, neutral → hold/watch, wait for clearer signal",
-                "Q4_reduce": "CMS -0.84~-0.25, negative momentum → reduce or avoid new entries",
-                "Q5_exit": "CMS<-0.84, strong negative → exit signal",
-            },
-        },
+        "stock_screens": stock_screens,
+        "market_watch_template": default_market_watch(market, quotes, stock_screens),
         "monitors": monitors,
-        "output_strategy_path": str(cfg["strategy"].relative_to(ROOT)),
+        "output_strategy_path": relpath(cfg["strategy"]),
         "symbol_suffix": cfg["suffix"],
-        "model_task": "Produce today's concise strategy from this compact pack. Use owner_premarket_prompt/positions_tracker when present. Keep full symbol suffix and show symbol + name in stock-specific lines.",
+        "allowed_symbol_suffixes": market_suffixes(market),
+        "model_task": "Produce today's concise strategy from this compact pack. First define market_watch: daily market thesis, regime hypotheses, cross-asset/benchmark triggers, sector rotation, and stock-screener-derived momentum-regime watches. Then define monitors for stock-specific follow-up. Live cron will prioritize market_watch before individual stocks.",
         "json_requirements": {
             "required_block": "proactive-trader-strategy",
+            "required_top_level_fields": ["date", "market", "market_watch", "monitors"],
+            "market_watch_required_fields": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime"],
             "required_monitor_fields": ["symbol", "name", "focus", "triggers"],
             "allowed_trigger_types": ["pct_change_abs_gte", "pct_change_above", "pct_change_below", "price_above", "price_below"],
-            "each_symbol_must_end_with": cfg["suffix"],
+            "each_symbol_must_end_with_one_of": market_suffixes(market),
             "stock_specific_display": "Show symbol + name.",
         },
     }
@@ -833,7 +1001,7 @@ def generate_strategy(market: str) -> str:
     body += ["", "## 盘后复盘重点", "1. 检查今日触发条件是否命中、是否需要调整下一交易日触发位。", "2. 检查新闻/财报/宏观变化是否改变 thesis。", "", "## 机器可读策略", "```proactive-trader-strategy", json.dumps(data, ensure_ascii=False, indent=2), "```", ""]
     out = "\n".join(body)
     cfg["strategy"].write_text(out)
-    return f"📋 {TODAY} {cfg['cn']}盘前策略已生成\n\nTop Call: {data['market_status']}；监控 {len(monitors)} 个标的；新闻 {len(news)} 条。\n\n{idx}\n\n📌 策略文件: {cfg['strategy'].relative_to(ROOT)}"
+    return f"📋 {TODAY} {cfg['cn']}盘前策略已生成\n\nTop Call: {data['market_status']}；监控 {len(monitors)} 个标的；新闻 {len(news)} 条。\n\n{idx}\n\n📌 策略文件: {relpath(cfg['strategy'])}"
 
 
 def live_check(market: str) -> str:
@@ -845,19 +1013,24 @@ def live_check(market: str) -> str:
         syms = extract_symbols_from_strategy(text, market) or thesis_symbols(market) or cfg["default_symbols"]
         monitors = [{"symbol": s, "focus": thesis_summary(s), "triggers": trigger_set(s, None, market)} for s in syms]
     symbols = [m["symbol"] for m in monitors]
-    if not symbols:
+    market_symbols = market_watch_symbols(data or {}, market)
+    quote_symbols = sorted(set(symbols + market_symbols))
+    if not quote_symbols:
         return "NO_REPLY"
-    quotes = quote(symbols)
+    quotes = quote(quote_symbols)
     state = load_live_state(market)
     state["last_run_at"] = now_iso()
-    state["runs"].append({"ts": state["last_run_at"], "symbols": len(symbols)})
+    state["runs"].append({"ts": state["last_run_at"], "symbols": len(symbols), "market_symbols": len(market_symbols)})
     state["runs"] = state["runs"][-32:]
     alerts = []
     repeat_lines = []
-    missing_count = sum(1 for s in symbols if not quotes.get(s))
-    mass_missing = missing_count > 0 and missing_count / max(len(symbols), 1) >= 0.5
+    market_alerts, market_repeats = evaluate_market_watch(market, data or {}, quotes, state)
+    alerts.extend(market_alerts)
+    repeat_lines.extend(market_repeats[:4])
+    missing_count = sum(1 for s in quote_symbols if not quotes.get(s))
+    mass_missing = missing_count > 0 and missing_count / max(len(quote_symbols), 1) >= 0.5
     if mass_missing:
-        alerts.append(f"⚠️ Longbridge 数据异常: {missing_count}/{len(symbols)} 标的无报价，本次跳过")
+        alerts.append(f"⚠️ Longbridge 数据异常: {missing_count}/{len(quote_symbols)} 个观察对象无报价，本次跳过")
     for m in monitors:
         sym = m["symbol"]
         row = quotes.get(sym)
@@ -887,7 +1060,7 @@ def live_check(market: str) -> str:
         incremental = []
         repeated = []
         for hit in hits:
-            should_alert, why = is_incremental_hit(sym_state, hit, chg)
+            should_alert, why = is_incremental_hit(sym_state, hit, chg, last)
             prev = sym_state["hits"].get(hit["key"], {})
             sym_state["hits"][hit["key"]] = {
                 "message": hit["message"],
@@ -896,6 +1069,9 @@ def live_check(market: str) -> str:
                 "last_seen_at": state["last_run_at"],
                 "last_price": last,
                 "last_change_pct": chg,
+                "last_alert_price": last if should_alert else prev.get("last_alert_price") or prev.get("last_price"),
+                "last_alert_change_pct": chg if should_alert else prev.get("last_alert_change_pct") or prev.get("last_change_pct"),
+                "last_alert_at": state["last_run_at"] if should_alert else prev.get("last_alert_at"),
                 "max_distance": max(float(prev.get("max_distance") or 0), float(hit.get("distance") or 0)),
                 "alert_count": int(prev.get("alert_count") or 0) + (1 if should_alert else 0),
             }
@@ -919,10 +1095,8 @@ def live_check(market: str) -> str:
             sym_state["repeat_count"] = int(sym_state.get("repeat_count") or 0) + 1
             repeat_lines.append(brief_quote_line(label, row))
     save_live_state(market, state)
-    if not alerts and not repeat_lines:
+    if not alerts:
         return "NO_REPLY"
-    if repeat_lines and not alerts:
-        return "\n".join(repeat_lines[:8])
     parts = []
     if alerts:
         parts.append("\n\n".join(alerts))
@@ -1003,7 +1177,7 @@ def close_review(market: str) -> str:
         "",
         f"要闻: {'；'.join(news[:2]) if news else '无可用新闻'}",
         "",
-        "📌 下一交易日策略将由盘前 cron 重新生成（含 SMAM 动量扫描）",
+        "📌 下一交易日策略将由盘前 cron 重新生成（含短线/中长线选股器）",
     ]
     return "\n".join(lines)
 
@@ -1020,6 +1194,21 @@ def validate_strategy_file(market: str) -> str:
         raise RuntimeError("strategy market mismatch")
     if data.get("date") != market_today(market):
         raise RuntimeError("strategy date mismatch")
+    market_watch = data.get("market_watch")
+    if not isinstance(market_watch, dict):
+        raise RuntimeError("strategy missing market_watch object")
+    if not (market_watch.get("thesis") or market_watch.get("daily_thesis")):
+        raise RuntimeError("market_watch missing thesis")
+    benchmarks = market_watch.get("benchmarks")
+    if not isinstance(benchmarks, list) or not benchmarks:
+        raise RuntimeError("market_watch benchmarks must be non-empty list")
+    for b in benchmarks:
+        if not isinstance(b, dict) or not b.get("symbol"):
+            raise RuntimeError("each market_watch benchmark needs symbol")
+        if b.get("triggers") is not None and not isinstance(b["triggers"], list):
+            raise RuntimeError("market_watch benchmark triggers must be list")
+    if not isinstance(market_watch.get("regime_hypotheses"), list) or not market_watch["regime_hypotheses"]:
+        raise RuntimeError("market_watch regime_hypotheses must be non-empty list")
     monitors = data.get("monitors")
     if not isinstance(monitors, list) or not monitors:
         raise RuntimeError("strategy monitors must be non-empty list")
@@ -1030,15 +1219,20 @@ def validate_strategy_file(market: str) -> str:
             raise RuntimeError(f"monitor {m.get('symbol')} missing stock name")
         if not isinstance(m["triggers"], list):
             raise RuntimeError("monitor triggers must be list")
-    suffix = cfg["suffix"]
-    bare = [m["symbol"] for m in monitors if not m["symbol"].endswith(suffix)]
+    suffixes = market_suffixes(market)
+    bare = [m["symbol"] for m in monitors if not any(m["symbol"].endswith(sfx) for sfx in suffixes)]
     if bare:
-        raise RuntimeError(f"symbols missing {suffix} suffix: {', '.join(bare[:8])}")
+        raise RuntimeError(f"symbols missing allowed suffix {suffixes}: {', '.join(bare[:8])}")
+    missing_watch_text = ["市场特征", "板块", "动量", "恐慌", "risk", "Risk", "轮动"]
+    if not any(term in text for term in missing_watch_text):
+        raise RuntimeError("strategy text must discuss market character, sector rotation, momentum, panic/risk state")
     if market == "HK":
         required_terms = ["KWEB", "BABA", "TCEHY", "MPNGY", "XIACY", "中概", "ADR", "隔夜美股", "金龙"]
         if not any(term in text for term in required_terms):
             raise RuntimeError("HK strategy missing hk_overnight_us_context discussion: must mention overnight China ADR/KWEB context")
-    return f"OK {cfg['strategy'].relative_to(ROOT)} monitors={len(monitors)}"
+        if not any(sfx in text for sfx in [".SZ", ".SH", "A股", "上证", "深证", "创业板", "沪深300"]):
+            raise RuntimeError("HK strategy missing A-share same-session market coverage")
+    return f"OK {relpath(cfg['strategy'])} monitors={len(monitors)} market_watch={len(benchmarks)}"
 
 def main() -> int:
     ap = argparse.ArgumentParser()
