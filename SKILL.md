@@ -1,13 +1,13 @@
 ---
 name: investment-system
 slug: investment-system
-version: 3.0.0
+version: 3.2.0
 description: Analyze stocks, build investment theses, run momentum scans, and execute multi-market trading strategies with DCF valuation and cron-based monitoring.
 ---
 
 # Investment System — 统一投资分析系统
 
-> v3.0.0 | 合并 financial + proactive-trader | 2026-05-16
+> v3.2.0 | 合并 financial + proactive-trader | 2026-05-20
 
 ## When to Use
 
@@ -85,13 +85,13 @@ description: Analyze stocks, build investment theses, run momentum scans, and ex
 
 ## Position Ledger Protocol
 
-当主人用自然语言描述仓位变化时（如“14.49买进1000股POET”、“卖出500股BABA 140”、“12.55止损了1000股POET”），不要写 daily memory，也不要手工编辑当前仓位表。必须运行：
+当主人用自然语言描述仓位变化时（如“14.49买进1000股POET”、“卖出500股BABA 140”、“12.55止损了1000股POET”、“BABA清仓2000股135.33”、“GLW加仓600股179.65”），不要写 daily memory，也不要手工编辑当前仓位表。必须先入账，再继续分析或回复。
 
 ```bash
 python3 skills/investment-system/scripts/portfolio_ledger.py record "<主人原话>"
 ```
 
-脚本会追加 `portfolio/transactions.csv`，并自动重建 `portfolio/positions-current.json` 与 `positions-tracker.md`。若脚本无法识别价格、股数、方向或标的，先向主人确认缺失字段。
+若一条消息包含多笔交易，先拆成单笔原子交易，逐条运行 `record`。脚本会追加 `portfolio/transactions.csv`，并自动重建 `portfolio/positions-current.json` 与 `positions-tracker.md`。若脚本无法识别价格、股数、方向或标的，先向主人确认缺失字段。
 
 ## Related Sibling Skills
 

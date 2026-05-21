@@ -16,15 +16,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parents[3]
-TZ = datetime.now().astimezone().tzinfo or None
+TZ = timezone(timedelta(hours=8))
 
 
 def run(cmd: List[str], timeout: int = 35) -> tuple[int, str, str]:
@@ -64,7 +63,7 @@ def earnings_preview(symbol: str) -> Dict[str, Any]:
     """Generate structured earnings preview data."""
     result = {
         "symbol": symbol,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": datetime.now(tz=TZ).isoformat(timespec="seconds"),
         "disclaimer": "Research/educational output. Not financial advice.",
     }
 

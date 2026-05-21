@@ -173,17 +173,24 @@ def run_momentum_scan(symbols: list[str]) -> dict[str, Any]:
         "--with-value",
         "--json",
     ]
-    result = subprocess.run(
-        cmd,
-        cwd=str(ROOT),
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=max(90, len(symbols) * 35),
-    )
-    if result.returncode != 0:
-        raise SystemExit(result.stderr.strip() or result.stdout.strip() or "momentum scan failed")
-    return json.loads(result.stdout)
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(ROOT),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(90, len(symbols) * 35),
+        )
+        if result.returncode != 0:
+            raise SystemExit(result.stderr.strip() or result.stdout.strip() or "momentum scan failed")
+        return json.loads(result.stdout)
+    except subprocess.TimeoutExpired as e:
+        print(f"[WARN] Momentum scan timed out after {e.timeout}s, falling back to empty scan", file=sys.stderr)
+        return {"results": []}
+    except Exception as e:
+        print(f"[WARN] Momentum scan failed: {e}, falling back to empty scan", file=sys.stderr)
+        return {"results": []}
 
 
 def parse_pe_rank(pe_rank: str | None) -> tuple[int, int]:

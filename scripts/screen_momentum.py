@@ -51,18 +51,19 @@ QUINTILE_THRESHOLDS = {
 }
 
 
-def run_longbridge(cmd: str) -> str:
+def run_longbridge(args: list[str]) -> str:
     """Run longbridge CLI and return stdout."""
+    cmd = ["longbridge"] + args
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=30
+            cmd, shell=False, capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:
             print(f"[WARN] longbridge error: {result.stderr[:200]}", file=sys.stderr)
             return ""
         return result.stdout
     except subprocess.TimeoutExpired:
-        print(f"[WARN] longbridge timeout: {cmd[:80]}", file=sys.stderr)
+        print(f"[WARN] longbridge timeout: {' '.join(cmd)[:80]}", file=sys.stderr)
         return ""
     except Exception as e:
         print(f"[WARN] longbridge exec error: {e}", file=sys.stderr)
@@ -79,50 +80,44 @@ def get_monthly_closes(symbol: str, months_back: int = 13) -> list[float]:
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    output = run_longbridge(
-        f"longbridge kline history {symbol} --start {start_str} --end {end_str} --period month"
-    )
+    output = run_longbridge([
+        "kline", "history", symbol,
+        "--start", start_str,
+        "--end", end_str,
+        "--period", "month",
+        "--format", "json"
+    ])
     if not output:
         return []
 
-    closes = []
-    for line in output.strip().split("\n"):
-        line = line.strip()
-        if not line or "Time" in line or "---" in line:
-            continue
-        parts = line.split("|")
-        if len(parts) >= 8:
-            try:
-                close = float(parts[4].strip())
-                closes.append(close)
-            except ValueError:
-                continue
-
-    return closes  # from oldest to newest
+    try:
+        data = json.loads(output)
+        closes = []
+        for item in data:
+            if "close" in item:
+                closes.append(float(item["close"]))
+        return closes
+    except Exception as e:
+        print(f"[WARN] Failed to parse JSON kline output for {symbol}: {e}", file=sys.stderr)
+        return []
 
 
 def get_pe_rank(symbol: str) -> tuple[int, int]:
     """
     获取最新 PE 分位数据。返回 (pe_rank, total_count)。
     """
-    output = run_longbridge(f"longbridge valuation-rank {symbol}")
+    output = run_longbridge(["valuation-rank", symbol, "--format", "json"])
     if not output:
         return (0, 0)
 
-    # 取最后一行数据行
-    lines = output.strip().split("\n")
-    for line in reversed(lines):
-        line = line.strip()
-        if not line or "Date" in line or "───" in line:
-            continue
-        parts = line.split()
-        if len(parts) >= 4:
-            try:
-                pe_field = parts[1]  # e.g. "68/159"
-                pe_rank, total = pe_field.split("/")
-                return (int(pe_rank), int(total))
-            except (ValueError, IndexError):
-                continue
+    try:
+        data = json.loads(output)
+        pe_list = data.get("pe", [])
+        if pe_list:
+            last = pe_list[-1]
+            return (int(last.get("rank", 0)), int(last.get("total", 0)))
+    except Exception as e:
+        print(f"[WARN] Failed to parse JSON valuation-rank output for {symbol}: {e}", file=sys.stderr)
     return (0, 0)
 
 
@@ -164,33 +159,33 @@ def calc_volume_ratio(symbol: str) -> float:
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = end_date.strftime("%Y-%m-%d")
 
-    output = run_longbridge(
-        f"longbridge kline history {symbol} --start {start_str} --end {end_str} --period month"
-    )
+    output = run_longbridge([
+        "kline", "history", symbol,
+        "--start", start_str,
+        "--end", end_str,
+        "--period", "month",
+        "--format", "json"
+    ])
     if not output:
         return 1.0
 
-    volumes = []
-    for line in output.strip().split("\n"):
-        line = line.strip()
-        if not line or "Time" in line or "---" in line:
-            continue
-        parts = line.split("|")
-        if len(parts) >= 8:
-            try:
-                vol = float(parts[5].strip().replace(",", ""))
-                volumes.append(vol)
-            except ValueError:
-                continue
-
-    if len(volumes) < 13:
+    try:
+        data = json.loads(output)
+        volumes = []
+        for item in data:
+            if "volume" in item:
+                vol_str = str(item["volume"]).replace(",", "")
+                volumes.append(float(vol_str))
+        if len(volumes) < 13:
+            return 1.0
+        recent_3_avg = sum(volumes[-3:]) / 3
+        all_12_avg = sum(volumes[-12:]) / 12
+        if all_12_avg == 0:
+            return 1.0
+        return recent_3_avg / all_12_avg
+    except Exception as e:
+        print(f"[WARN] Failed to parse JSON kline output for volume ratio of {symbol}: {e}", file=sys.stderr)
         return 1.0
-
-    recent_3_avg = sum(volumes[-3:]) / 3
-    all_12_avg = sum(volumes[-12:]) / 12
-    if all_12_avg == 0:
-        return 1.0
-    return recent_3_avg / all_12_avg
 
 
 def calc_cms(signals: dict[str, float], universe_stats: dict = None) -> float:
@@ -266,7 +261,6 @@ def _norm_inv(p: float) -> float:
     # Abramowitz and Stegun rational approximation
     a = [2.515517, 0.802853, 0.010328]
     b = [1.432788, 0.189269, 0.001308]
-    c = [0.0] * 3
 
     t = math.sqrt(-2.0 * math.log(min(p, 1 - p)))
     num = a[0] + a[1] * t + a[2] * t * t
@@ -378,7 +372,7 @@ def scan_symbols(symbols: list[str], with_value: bool = False) -> list[dict]:
             universe_stats[sig_name] = {"mean": 0, "std": 1}
             continue
         mean = sum(vals) / len(vals)
-        variance = sum((v - mean) ** 2 for v in vals) / len(vals)
+        variance = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)
         std = math.sqrt(variance) if variance > 0 else 1
         universe_stats[sig_name] = {"mean": mean, "std": std}
 
@@ -452,7 +446,7 @@ def print_table(results: list[dict], with_value: bool = False):
 
 def load_thesis_symbols(thesis_dir: str = None) -> list[str]:
     """
-    从 proactive-trader/thesis-tracker 目录读取所有 thesis 标的。
+    从 investment-system/thesis-tracker 目录读取所有 thesis 标的。
     """
     if thesis_dir is None:
         # 尝试默认路径

@@ -445,15 +445,18 @@ def load_strategy(path: Path, market: str) -> Tuple[str, Optional[Dict[str, Any]
     if not path.exists():
         return "", None
     text = path.read_text(errors="replace")
-    m = re.search(r"```proactive-trader-strategy\n(.*?)\n```", text, re.S)
+    m = re.search(r"```(?:proactive-trader|investment-system)-strategy\n(.*?)\n```", text, re.S)
     if not m:
         return text, None
     try:
         data = json.loads(m.group(1))
     except Exception:
         return text, None
-    if isinstance(data, dict) and isinstance(data.get("proactive-trader-strategy"), dict):
-        data = data["proactive-trader-strategy"]
+    if isinstance(data, dict):
+        if isinstance(data.get("investment-system-strategy"), dict):
+            data = data["investment-system-strategy"]
+        elif isinstance(data.get("proactive-trader-strategy"), dict):
+            data = data["proactive-trader-strategy"]
     if data.get("date") != market_today(market) or data.get("market") != market:
         return text, None
     return text, data
@@ -473,6 +476,19 @@ def market_status(market: str) -> str:
             if r.get("market") == MARKET_CONFIG[market]["market_code"]:
                 return r.get("status", "Unknown")
     return "Unknown"
+
+
+def regular_session_window(market: str) -> Tuple[dt.time, dt.time]:
+    return dt.time(9, 30), dt.time(16, 0)
+
+
+def regular_session_is_active(market: str, now: Optional[dt.datetime] = None) -> bool:
+    """Guard live alerts from using stale prior-session quote changes before open."""
+    local_now = now.astimezone(MARKET_TZ[market]) if now else dt.datetime.now(MARKET_TZ[market])
+    start, end = regular_session_window(market)
+    if not (start <= local_now.time() < end):
+        return False
+    return market_is_trading_day(market, local_now.date().isoformat())
 
 
 def trigger_set(symbol: str, row: Optional[Dict[str, Any]], market: str) -> List[Dict[str, Any]]:
@@ -826,6 +842,21 @@ def default_market_watch_triggers(symbol: str, market: str) -> List[Dict[str, An
     return [{"type": "pct_change_abs_gte", "level": 1.5 if market == "US" else 2.0, "severity": "medium", "reason": "市场基准显著波动"}]
 
 
+def should_alert_market_watch(prev: Dict[str, Any], hit: Dict[str, Any]) -> bool:
+    """Determine if a market watch hit should trigger a new alert."""
+    if not prev:
+        return True
+    prev_rank = SEVERITY_RANK.get(str(prev.get("severity", "medium")), 2)
+    rank = SEVERITY_RANK.get(str(hit.get("severity", "medium")), 2)
+    if rank > prev_rank:
+        return True
+    prev_distance = float(prev.get("max_distance") or 0)
+    distance = float(hit.get("distance") or 0)
+    if distance >= max(prev_distance + 0.6, prev_distance * 1.2):
+        return True
+    return False
+
+
 def evaluate_market_watch(market: str, data: Dict[str, Any], quotes: Dict[str, Dict[str, Any]], state: Dict[str, Any]) -> Tuple[List[str], List[str]]:
     watch = data.get("market_watch") if isinstance(data, dict) else None
     if not isinstance(watch, dict):
@@ -859,7 +890,7 @@ def evaluate_market_watch(market: str, data: Dict[str, Any], quotes: Dict[str, D
         for hit in hits:
             key = f"{sym}:{hit['key']}"
             prev = market_state["hits"].get(key, {})
-            should_alert = not prev or SEVERITY_RANK.get(hit["severity"], 2) > SEVERITY_RANK.get(str(prev.get("severity", "medium")), 2) or float(hit.get("distance") or 0) >= max(float(prev.get("max_distance") or 0) + 0.6, float(prev.get("max_distance") or 0) * 1.2)
+            should_alert = should_alert_market_watch(prev, hit)
             market_state["hits"][key] = {
                 "message": hit["message"],
                 "severity": hit["severity"],
@@ -923,7 +954,7 @@ def build_premarket_pack(market: str) -> str:
 
     pack = {
         "schema_version": 1,
-        "date": TODAY,
+        "date": market_today(market),
         "market": market,
         "generated_at": dt.datetime.now(TZ).isoformat(timespec="seconds"),
         "market_status": market_status(market),
@@ -942,7 +973,7 @@ def build_premarket_pack(market: str) -> str:
         "allowed_symbol_suffixes": market_suffixes(market),
         "model_task": "Produce today's concise strategy from this compact pack. First define market_watch: daily market thesis, regime hypotheses, cross-asset/benchmark triggers, sector rotation, and stock-screener-derived momentum-regime watches. Then define monitors for stock-specific follow-up. Live cron will prioritize market_watch before individual stocks.",
         "json_requirements": {
-            "required_block": "proactive-trader-strategy",
+            "required_block": "investment-system-strategy",
             "required_top_level_fields": ["date", "market", "market_watch", "monitors"],
             "market_watch_required_fields": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime"],
             "required_monitor_fields": ["symbol", "name", "focus", "triggers"],
@@ -953,59 +984,11 @@ def build_premarket_pack(market: str) -> str:
     }
     return json.dumps(pack, ensure_ascii=False, separators=(",", ":"))
 
-def generate_strategy(market: str) -> str:
-    """DEPRECATED: Legacy direct strategy generation. Use build_premarket_pack() instead.
-    This function bypasses model-driven strategy drafting and writes a basic strategy
-    directly. Retained for backward compatibility only."""
-    import warnings
-    warnings.warn("generate_strategy() is deprecated; use build_premarket_pack() for model-driven strategies", DeprecationWarning, stacklevel=2)
-    cfg = MARKET_CONFIG[market]
-    STRATEGY_DIR.mkdir(parents=True, exist_ok=True)
-    thesis_set = set(thesis_symbols(market))
-    symbols = sorted(set(cfg["default_symbols"]) | thesis_set)
-    quotes = quote(cfg["quote_core"] + symbols)
-    news = news_search("US stock market premarket" if market == "US" else "港股 盘前 恒生指数", 4)
-    monitors = []
-    for sym in symbols:
-        row = quotes.get(sym)
-        monitors.append({
-            "symbol": sym,
-            "name": symbol_name(sym, row),
-            "source": "thesis" if sym in thesis_set else "watchlist",
-            "focus": thesis_summary(sym) or "大类资产/市场风向监控",
-            "last_ref": qnum(row or {}, "last") or qnum(row or {}, "last_done"),
-            "prev_close": qnum(row or {}, "prev_close"),
-            "triggers": trigger_set(sym, row, market),
-        })
-    data = {
-        "schema_version": 1,
-        "date": TODAY,
-        "market": market,
-        "generated_at": dt.datetime.now(TZ).isoformat(timespec="seconds"),
-        "market_status": market_status(market),
-        "symbols": [m["symbol"] for m in monitors],
-        "monitors": monitors,
-        "review_focus": [
-            "检查触发条件是否命中以及命中后的走势延续性",
-            "复盘当日新闻/宏观事件是否改变 thesis 或下一交易日触发位",
-        ],
-        "data_quality": {"quote_count": len(quotes), "news_count": len(news)},
-    }
-
-    title = f"# {TODAY} {cfg['title']}"
-    idx = " | ".join(f"{display_symbol(s, quotes.get(s))}: {fmt_price(quotes.get(s))}" for s in cfg["index_symbols"] if s in quotes) or "N/A"
-    body = [title, "", "## 背景", f"- 市场状态: {data['market_status']}", f"- 主要新闻: {'；'.join(news[:3]) if news else '无可用新闻'}", "", "## 大盘环境", f"- {idx}", "", "## 今日监控标的", "", "| 标的 | 来源 | 参考价 | 今日关注点 | 结构化触发条件 |", "|------|------|--------|------------|----------------|"]
-    for m in monitors:
-        trig = "; ".join(f"{t['type']} {t['level']} ({t['severity']})" for t in m["triggers"][:2])
-        body.append(f"| {display_symbol(m['symbol'], quotes.get(m['symbol']), m)} | {m['source']} | {m['last_ref'] or 'N/A'} | {m['focus']} | {trig} |")
-    body += ["", "## 盘后复盘重点", "1. 检查今日触发条件是否命中、是否需要调整下一交易日触发位。", "2. 检查新闻/财报/宏观变化是否改变 thesis。", "", "## 机器可读策略", "```proactive-trader-strategy", json.dumps(data, ensure_ascii=False, indent=2), "```", ""]
-    out = "\n".join(body)
-    cfg["strategy"].write_text(out)
-    return f"📋 {TODAY} {cfg['cn']}盘前策略已生成\n\nTop Call: {data['market_status']}；监控 {len(monitors)} 个标的；新闻 {len(news)} 条。\n\n{idx}\n\n📌 策略文件: {relpath(cfg['strategy'])}"
-
 
 def live_check(market: str) -> str:
     cfg = MARKET_CONFIG[market]
+    if not regular_session_is_active(market):
+        return "NO_REPLY"
     text, data = load_strategy(cfg["strategy"], market)
     if data:
         monitors = data.get("monitors", [])
@@ -1189,7 +1172,7 @@ def validate_strategy_file(market: str) -> str:
     if not cfg["strategy"].exists():
         raise RuntimeError(f"missing strategy file: {cfg['strategy']}")
     if not data:
-        raise RuntimeError("missing or invalid proactive-trader-strategy JSON block for today")
+        raise RuntimeError("missing or invalid investment-system-strategy JSON block for today")
     if data.get("market") != market:
         raise RuntimeError("strategy market mismatch")
     if data.get("date") != market_today(market):
@@ -1243,7 +1226,7 @@ def main() -> int:
     ns = ap.parse_args()
     try:
         if ns.cmd == "premarket":
-            print(generate_strategy(ns.market))
+            print(build_premarket_pack(ns.market))
         elif ns.cmd == "pack":
             print(build_premarket_pack(ns.market))
         elif ns.cmd == "validate":
@@ -1254,7 +1237,7 @@ def main() -> int:
             print(close_review(ns.market))
         return 0
     except Exception as e:
-        print(f"⚠️ Proactive Trader {ns.cmd} {ns.market} failed: {e}")
+        print(f"⚠️ Investment System {ns.cmd} {ns.market} failed: {e}")
         return 1
 
 if __name__ == "__main__":

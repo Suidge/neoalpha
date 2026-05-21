@@ -183,9 +183,9 @@ def next_trade_id(rows: list[dict[str, str]], date: str, symbol: str, side: str)
 def parse_trade_text(text: str, date: str, account: str, instruments: dict[str, dict[str, str]]) -> dict[str, str]:
     upper_text = text.upper()
     clean = re.sub(r"\s+", "", upper_text)
-    if re.search(r"买入|买进|加仓|建仓|开仓|买|BOUGHT|BUY", clean):
+    if re.search(r"买入|买进|加仓|补仓|建仓|开仓|重新买|买|BOUGHT|BUY", clean):
         side = "BUY"
-    elif re.search(r"卖出|止损|止盈|减仓|清仓|卖|抛|SOLD|SELL|STOPLOSS|STOPGAIN|TAKEPROFIT", clean):
+    elif re.search(r"卖出|卖掉|全卖|出了|出掉|出清|平仓|止损|止盈|减仓|清仓|卖|抛|SOLD|SELL|STOPLOSS|STOPGAIN|TAKEPROFIT", clean):
         side = "SELL"
     else:
         raise ValueError("无法识别买入/卖出方向")
@@ -197,8 +197,17 @@ def parse_trade_text(text: str, date: str, account: str, instruments: dict[str, 
 
     symbol_pattern = r"[A-Z]{1,8}(?:\.[A-Z]{2})?|\d{4,6}(?:\.(?:HK|SZ|SH))?"
     symbols = re.findall(rf"(?:股|SHARES?|SH)\s*({symbol_pattern})", upper_text)
-    symbols.extend(re.findall(rf"\b(?:{symbol_pattern})\b", upper_text))
-    symbols = [s for s in symbols if s not in {"BUY", "SELL", "BOUGHT", "SOLD", "SHARES", "SH"}]
+    symbols.extend(re.findall(symbol_pattern, upper_text))
+    symbols.extend(
+        candidate
+        for candidate in instruments
+        if candidate.split(".", 1)[0] in upper_text
+    )
+    symbols = [
+        s for s in symbols
+        if s not in {"BUY", "SELL", "BOUGHT", "SOLD", "SHARES", "SH"}
+        and not re.fullmatch(r"\d+(?:\.\d+)?", s)
+    ]
     if not symbols:
         raise ValueError("无法识别标的代码，例如：14.49买进1000股POET")
     symbol = infer_symbol(symbols[-1], instruments)
@@ -275,11 +284,15 @@ def rebuild() -> dict[str, Any]:
             pos["quantity"] += quantity
             pos["cost_basis"] += amount + fees + tax
         elif side == "SELL":
-            avg_cost = pos["cost_basis"] / pos["quantity"] if pos["quantity"] else Decimal("0")
-            cost_reduction = avg_cost * quantity
-            pos["quantity"] -= quantity
-            pos["cost_basis"] -= cost_reduction
-            pos["realized_pnl"] += amount - fees - tax - cost_reduction
+            if pos["quantity"] > 0:
+                avg_cost = pos["cost_basis"] / pos["quantity"]
+                cost_reduction = avg_cost * quantity
+                pos["quantity"] -= quantity
+                pos["cost_basis"] -= cost_reduction
+                pos["realized_pnl"] += amount - fees - tax - cost_reduction
+            else:
+                pos["quantity"] -= quantity
+                pos["realized_pnl"] += amount - fees - tax
         elif side == "DIVIDEND":
             pos["realized_pnl"] += amount
         pos["last_trade_date"] = row.get("date") or pos["last_trade_date"]
