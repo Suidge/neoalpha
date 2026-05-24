@@ -21,6 +21,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from market_health_scan import scan_market_health
+
 ROOT = Path(__file__).resolve().parents[3]
 SKILL = ROOT / "skills" / "investment-system"
 THESIS_DIR = SKILL / "thesis-tracker"
@@ -765,7 +767,7 @@ def load_positions_tracker(market: str) -> Dict[str, Any]:
     }
 
 
-def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_screens: Dict[str, Any]) -> Dict[str, Any]:
+def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_screens: Dict[str, Any], medium_term_health: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Create market-level watch scaffolding for the model to refine in the daily strategy."""
     cfg = MARKET_CONFIG[market]
     short_results = stock_screens.get("short_term_momentum", {}).get("results", [])
@@ -807,9 +809,16 @@ def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_s
             "avoid_chase_symbols": avoid[:8],
             "watch": "盘中优先验证短线选股器高分标的是否继续扩散；若 Avoid Chase 标的领跌或高分标的失效，优先判断动量断裂/风险收缩。",
         },
+        "medium_term_health": {
+            "source": "medium_term_health",
+            "status": (medium_term_health or {}).get("status"),
+            "risk_level": (medium_term_health or {}).get("risk_level"),
+            "strategy_bias": (medium_term_health or {}).get("strategy_bias"),
+            "watch": "盘前先用中期健康度决定进攻/防守底色；盘中验证关键收复位和失效位。",
+        },
         "strategy_authoring_requirement": {
             "daily_json_field": "market_watch",
-            "must_include": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime"],
+            "must_include": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime", "medium_term_health"],
             "live_priority": "market_watch observations before monitor-level stock alerts",
         },
     }
@@ -951,6 +960,17 @@ def build_premarket_pack(market: str) -> str:
         "scanned_symbols": screen_symbols,
         "usage": "Use short_term_momentum for today's tactical watch/add candidates; use long_term_compounder for thesis/DCF candidate prioritization.",
     }
+    try:
+        medium_term_health = scan_market_health(market)
+    except Exception as exc:
+        medium_term_health = {
+            "schema_version": 1,
+            "market": market,
+            "status": "unavailable",
+            "risk_level": "unknown",
+            "strategy_bias": "ignore_until_data_available",
+            "error": str(exc)[:180],
+        }
 
     pack = {
         "schema_version": 1,
@@ -966,16 +986,17 @@ def build_premarket_pack(market: str) -> str:
         "owner_premarket_prompt": load_premarket_prompt(market),
         "positions_tracker": load_positions_tracker(market),
         "stock_screens": stock_screens,
-        "market_watch_template": default_market_watch(market, quotes, stock_screens),
+        "medium_term_health": medium_term_health,
+        "market_watch_template": default_market_watch(market, quotes, stock_screens, medium_term_health),
         "monitors": monitors,
         "output_strategy_path": relpath(cfg["strategy"]),
         "symbol_suffix": cfg["suffix"],
         "allowed_symbol_suffixes": market_suffixes(market),
-        "model_task": "Produce today's concise strategy from this compact pack. First define market_watch: daily market thesis, regime hypotheses, cross-asset/benchmark triggers, sector rotation, and stock-screener-derived momentum-regime watches. Then define monitors for stock-specific follow-up. Live cron will prioritize market_watch before individual stocks.",
+        "model_task": "Produce today's concise strategy from this compact pack. First define market_watch: daily market thesis, medium-term market health, regime hypotheses, cross-asset/benchmark triggers, sector rotation, and stock-screener-derived momentum-regime watches. Then define monitors for stock-specific follow-up. Live cron will prioritize market_watch before individual stocks.",
         "json_requirements": {
             "required_block": "investment-system-strategy",
             "required_top_level_fields": ["date", "market", "market_watch", "monitors"],
-            "market_watch_required_fields": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime"],
+            "market_watch_required_fields": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime", "medium_term_health"],
             "required_monitor_fields": ["symbol", "name", "focus", "triggers"],
             "allowed_trigger_types": ["pct_change_abs_gte", "pct_change_above", "pct_change_below", "price_above", "price_below"],
             "each_symbol_must_end_with_one_of": market_suffixes(market),
@@ -1192,6 +1213,11 @@ def validate_strategy_file(market: str) -> str:
             raise RuntimeError("market_watch benchmark triggers must be list")
     if not isinstance(market_watch.get("regime_hypotheses"), list) or not market_watch["regime_hypotheses"]:
         raise RuntimeError("market_watch regime_hypotheses must be non-empty list")
+    health = market_watch.get("medium_term_health")
+    if not isinstance(health, dict):
+        raise RuntimeError("market_watch missing medium_term_health object")
+    if not health.get("status"):
+        raise RuntimeError("market_watch medium_term_health missing status")
     monitors = data.get("monitors")
     if not isinstance(monitors, list) or not monitors:
         raise RuntimeError("strategy monitors must be non-empty list")
@@ -1206,7 +1232,7 @@ def validate_strategy_file(market: str) -> str:
     bare = [m["symbol"] for m in monitors if not any(m["symbol"].endswith(sfx) for sfx in suffixes)]
     if bare:
         raise RuntimeError(f"symbols missing allowed suffix {suffixes}: {', '.join(bare[:8])}")
-    missing_watch_text = ["市场特征", "板块", "动量", "恐慌", "risk", "Risk", "轮动"]
+    missing_watch_text = ["市场特征", "板块", "动量", "恐慌", "risk", "Risk", "轮动", "中期健康度"]
     if not any(term in text for term in missing_watch_text):
         raise RuntimeError("strategy text must discuss market character, sector rotation, momentum, panic/risk state")
     if market == "HK":

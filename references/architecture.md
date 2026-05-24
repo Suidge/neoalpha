@@ -9,7 +9,7 @@
 ## 数据流
 
 ```text
-盘前 cron → build_{us,hk}_premarket_pack.py（compact pack；stock_screens；market_watch_template；HK 额外采集中概 ADR 隔夜线索与A股指数；可选 prompt/结构化 positions 注入）→ 模型主动研判 → memory/strategies/{market}-daily.md → validate wrapper
+盘前 cron → build_{us,hk}_premarket_pack.py（compact pack；stock_screens；medium_term_health；market_watch_template；HK 额外采集中概 ADR 隔夜线索与A股指数；可选 prompt/结构化 positions 注入）→ 模型主动研判 → memory/strategies/{market}-daily.md → validate wrapper
      ↓
 盘中 cron → run_{us,hk}_live_check.py → market_watch + monitor triggers + live-state 分层播报 → NO_REPLY / 市场观察 / 个股警报 / 一行复触发简报
      ↓
@@ -84,6 +84,7 @@ memory/strategies/{us,hk}-live-state-YYYY-MM-DD.json
 - `benchmarks[]`：指数/跨资产/A股指数观察对象，支持与 `monitors[]` 相同的 `triggers[]`。
 - `sector_rotation[]`：热点/冷点板块观察。
 - `momentum_regime`：SMAM 强弱分布对市场动量的解释。
+- `medium_term_health`：中期大盘健康度状态、风险等级、关键收复位/失效位和仓位进攻性约束。
 
 每个 monitor 至少包含 `symbol`, `name`, `focus`, `triggers[]`。所有个股相关可读汇报必须同时显示代码和股票名称。HK 策略允许 `.HK/.SZ/.SH`，用于覆盖同段交易的 A 股。
 

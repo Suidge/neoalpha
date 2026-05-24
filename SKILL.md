@@ -49,6 +49,7 @@ description: Analyze stocks, build investment theses, run momentum scans, and ex
 | "三张表" | B4 | [references/3-statement-model.md](references/3-statement-model.md) |
 | "更新模型" | B5 | [references/model-update.md](references/model-update.md) |
 | "SMAM" / 动量扫描 | B6 | [references/momentum-model.md](references/momentum-model.md) |
+| "中期健康度" / 大盘健康度 / 20日线框架 | B6-H | [references/medium-term-market-health.md](references/medium-term-market-health.md) |
 | "模型审计 / debug model / QA spreadsheet" | B6-A | [references/model-audit.md](references/model-audit.md) |
 | "unit economics / ARR / NDR / LTV:CAC" | B6-B | [references/unit-economics.md](references/unit-economics.md) |
 | "IRR / MOIC / returns analysis" | B6-C | [references/returns-analysis.md](references/returns-analysis.md) |

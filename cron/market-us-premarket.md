@@ -28,6 +28,7 @@
 1. 运行无参数数据包 wrapper:`skills/investment-system/scripts/build_us_premarket_pack.py`。
 2. 基于数据包轻量研判:
    - **Preset 选股器**（数据包 `stock_screens` 字段）：读取 `short_term_momentum` 与 `long_term_compounder`，分别作为今日短线盯盘/试仓候选和中长线 thesis/DCF 优先级
+   - **中期健康度扫描**（数据包 `medium_term_health` 字段）：读取指数/ETF 的 MA20/60/120/250、20日线收复、MACD 零轴、50% 回撤和关键阴线高点，先决定今日进攻/防守底色
    - **市场观察模板**（数据包 `market_watch_template` 字段）：先制定今日市场特征假设，再制定个股盯盘；盘中 live 会优先验证 `market_watch`
    - 宏观/指数、盘前真实报价、上一常规收盘、新闻标题
    - thesis 标的、owner prompt、structured positions（`portfolio/positions-current.json`，兼容字段名 `positions_tracker`）
@@ -61,6 +62,7 @@
 ```
 
 - **选股器结论必须出现在数据视角和情报汇总中**
+- **中期健康度必须进入数据视角和作战计划**：写明 `medium_term_health.status`、`risk_level`、主要受损/健康指数、关键收复位和失效位；若 status 为 `warning/damaged`，降低追高和新增仓位优先级。
 - **市场观察必须是主菜**：必须判断今天市场是否恐慌、是否 risk-on/risk-off、动量是否发生显著变化、热点板块是否切换；个股波动只能作为这些判断的证据或次级监控。
 - **仓位意识必须进入作战计划**：已持仓标的要区分“持有/加仓/减仓/观察”，不要把持仓标的当作普通 watchlist；仓位数据来自数据包 `positions_tracker.positions`。
 4. **选股器研判规则**：
@@ -75,6 +77,7 @@
    - `market_watch.benchmarks[]`: 指数/跨资产观察对象，每个包含 `symbol`、`name`、`role`、`triggers[]`
    - `market_watch.sector_rotation[]`: 热点/冷点板块观察
    - `market_watch.momentum_regime`: 基于 `stock_screens` 的短线/中长线强弱分布解释
+   - `market_watch.medium_term_health`: 基于 `medium_term_health` 的中期健康度状态、关键证据、收复位、失效位和今日仓位进攻性约束
    - `monitors[]`: 个股层面，每个 monitor 必须包含 `symbol`、`name`、`focus`、`triggers[]`
    **每个 symbol 必须保留完整后缀（如 NVDA.US），不得省略为裸 ticker。** JSON block 写在 `## 机器可读策略` 标题下、四段式人类可读部分之后。
 7. 运行无参数校验 wrapper:`skills/investment-system/scripts/validate_us_strategy.py`。
