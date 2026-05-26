@@ -17,9 +17,9 @@
 - 禁止因为命令仍在运行而启动重复的数据包或校验命令。
 - 禁止假设脚本会自动写入策略文件；数据包 wrapper 只提供数据,策略文件必须由本 cron run 写入。
 - 写入策略文件后必须重新读取或校验目标文件,确认包含今日标题、四段式结构和 `## 机器可读策略`。
-- 机器可读代码块必须使用 ```proactive-trader-strategy,不能使用 ```json。
-- 机器可读 JSON 顶层必须直接包含 `date`、`market`、`market_watch`、`monitors`,禁止包裹在 `strategy` 或 `proactive-trader-strategy` 字段下。
-- 运行正式校验前,必须先用 Python `json.loads` 解析 ```proactive-trader-strategy 代码块内容；解析失败必须修复 JSON 语法后再继续。
+- 机器可读代码块必须使用 ```neoalpha-strategy,不能使用 ```json。
+- 机器可读 JSON 顶层必须直接包含 `date`、`market`、`market_watch`、`monitors`,禁止包裹在 `strategy` 或 `neoalpha-strategy` 字段下。
+- 运行正式校验前,必须先用 Python `json.loads` 解析 ```neoalpha-strategy 代码块内容；解析失败必须修复 JSON 语法后再继续。
 - 校验失败时只能修正策略文件并重跑校验,不能输出盘前简报。
 - 最终回复必须直接从盘前策略简报正文开始；禁止包含 `Validation passed`、`Now I output`、`Let me`、`I have`、`已完成校验` 等执行状态句。
 
@@ -71,7 +71,7 @@
    - `long_term_compounder` 的 `Thesis Candidate` / `DCF Candidate` → 中长线深研优先级，必要时进入 thesis/DCF 更新
    - 两个选股器共同高分 → 优先列入作战计划；短线高分但长线低分 → 只按交易型观察处理
 5. 所有涉及个股的可读内容必须同时写代码和股票名称（如 `NVDA.US 英伟达`），不得只写代码。
-6. JSON block 必须使用 ```proactive-trader-strategy 代码块；顶层必须直接是策略对象,不要再包一层 `strategy` 或 `proactive-trader-strategy` key。必须包含：
+6. JSON block 必须使用 ```neoalpha-strategy 代码块；顶层必须直接是策略对象,不要再包一层 `strategy` 或 `neoalpha-strategy` key。必须包含：
    - `market_watch.thesis`: 今日市场主假设
    - `market_watch.regime_hypotheses[]`: risk-on/risk-off/恐慌/轮动/震荡等假设、证据、证伪条件
    - `market_watch.benchmarks[]`: 指数/跨资产观察对象，每个包含 `symbol`、`name`、`role`、`triggers[]`

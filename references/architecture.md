@@ -70,7 +70,7 @@ memory/strategies/{us,hk}-live-state-YYYY-MM-DD.json
 策略文件同时给人读和机器读。机器读部分必须使用 fenced block：
 
 ```text
-```proactive-trader-strategy
+```neoalpha-strategy
 { ... JSON ... }
 ```
 ```

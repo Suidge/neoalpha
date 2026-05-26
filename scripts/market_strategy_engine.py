@@ -485,7 +485,7 @@ def load_strategy(path: Path, market: str) -> Tuple[str, Optional[Dict[str, Any]
     if not path.exists():
         return "", None
     text = path.read_text(errors="replace")
-    m = re.search(r"```(?:proactive-trader|investment-system)-strategy\n(.*?)\n```", text, re.S)
+    m = re.search(r"```neoalpha-strategy\n(.*?)\n```", text, re.S)
     if not m:
         return text, None
     try:
@@ -493,10 +493,8 @@ def load_strategy(path: Path, market: str) -> Tuple[str, Optional[Dict[str, Any]
     except Exception:
         return text, None
     if isinstance(data, dict):
-        if isinstance(data.get("investment-system-strategy"), dict):
-            data = data["investment-system-strategy"]
-        elif isinstance(data.get("proactive-trader-strategy"), dict):
-            data = data["proactive-trader-strategy"]
+        if isinstance(data.get("neoalpha-strategy"), dict):
+            data = data["neoalpha-strategy"]
     if data.get("date") != market_today(market) or data.get("market") != market:
         return text, None
     return text, data
@@ -1074,7 +1072,7 @@ def build_premarket_pack(market: str) -> str:
         "allowed_symbol_suffixes": market_suffixes(market),
         "model_task": "Produce today's concise strategy from this compact pack. First define market_watch: daily market thesis, medium-term market health, regime hypotheses, cross-asset/benchmark triggers, sector rotation, and stock-screener-derived momentum-regime watches. Then define monitors for stock-specific follow-up. Live cron will prioritize market_watch before individual stocks.",
         "json_requirements": {
-            "required_block": "investment-system-strategy",
+            "required_block": "neoalpha-strategy",
             "required_top_level_fields": ["date", "market", "market_watch", "monitors"],
             "market_watch_required_fields": ["thesis", "regime_hypotheses", "benchmarks", "sector_rotation", "momentum_regime", "medium_term_health"],
             "required_monitor_fields": ["symbol", "name", "focus", "triggers"],
@@ -1296,7 +1294,7 @@ def validate_strategy_file(market: str) -> str:
     if not cfg["strategy"].exists():
         raise RuntimeError(f"missing strategy file: {cfg['strategy']}")
     if not data:
-        raise RuntimeError("missing or invalid investment-system-strategy JSON block for today")
+        raise RuntimeError("missing or invalid neoalpha-strategy JSON block for today")
     if data.get("market") != market:
         raise RuntimeError("strategy market mismatch")
     if data.get("date") != market_today(market):

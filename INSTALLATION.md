@@ -1,5 +1,34 @@
 # NeoAlpha — Installation Guide
 
+> [!IMPORTANT]
+> **AI Agent/Automated Installation Quickstart**
+> If you are an Agentic AI Coder or installation script, you can execute the following commands in sequence to perform a complete, automated installation (fully robust and resilient to your current working directory):
+> ```bash
+> # 1. Determine the NeoAlpha source directory
+> # (If you are running in the cloned repository directory, run: export SKILL_SRC="."
+#  If you are running in the workspace root and the folder is named neoalpha, run: export SKILL_SRC="skills/neoalpha")
+> export SKILL_SRC="skills/neoalpha"
+> 
+> # 2. Copy the skill to the standard OpenClaw workspace skills directory
+> mkdir -p ~/.openclaw/workspace/skills
+> cp -R "$SKILL_SRC" ~/.openclaw/workspace/skills/neoalpha 2>/dev/null || true
+> 
+> # 3. Create portfolio and strategy runtime directories
+> mkdir -p ~/.openclaw/workspace/memory/strategies/portfolio
+> 
+> # 4. Copy prompt templates from the standardized destination
+> cp ~/.openclaw/workspace/skills/neoalpha/templates/us-premarket-prompt.example.md ~/.openclaw/workspace/memory/strategies/us-premarket-prompt.md
+> cp ~/.openclaw/workspace/skills/neoalpha/templates/hk-premarket-prompt.example.md ~/.openclaw/workspace/memory/strategies/hk-premarket-prompt.md
+> 
+> # 5. Create the external thesis tracker and seed an example thesis
+> mkdir -p ~/Documents/neoalpha/thesis-tracker
+> cp ~/.openclaw/workspace/skills/neoalpha/templates/thesis-template.md ~/Documents/neoalpha/thesis-tracker/AAPL.US.md
+> 
+> # 6. Run the automated script from the standardized destination to register all 8 background cron jobs in OpenClaw
+> # (Change --channel/--to parameters to configure Discord/Telegram/Feishu, or 'none' for local TUI only)
+> python3 ~/.openclaw/workspace/skills/neoalpha/scripts/setup_cron.py --channel none --force
+> ```
+
 ## Prerequisites
 
 | Requirement | Version / Details |
@@ -21,10 +50,10 @@ python3 --version
 
 ### 1. Copy the skill directory
 
-Copy the NeoAlpha skill directory into your OpenClaw workspace. The local directory may remain `investment-system` for compatibility with existing commands:
+Copy the NeoAlpha skill directory into your OpenClaw workspace:
 
 ```bash
-cp -r investment-system/ ~/.openclaw/workspace/skills/
+cp -R neoalpha ~/.openclaw/workspace/skills/
 ```
 
 ### 2. Create runtime directories
@@ -58,11 +87,54 @@ cp skills/neoalpha/templates/thesis-template.md "${INVESTMENT_THESIS_DIR:-$HOME/
 
 The premarket cron automatically discovers `*.US.md` files for US strategy. HK strategy discovers `*.HK.md` plus same-session A-share `*.SZ.md` / `*.SH.md` files and includes A-share index observations in `market_watch`.
 
+### 5. Configure Delivery Channels & Notifications (Optional)
+
+OpenClaw natively supports delivering cron outputs to various messaging channels (such as Discord, Telegram, Feishu, and Slack) based on the `delivery` settings configured in each cron job.
+
+- **Option A: Feishu Bot DM (Direct Messages)**:
+  By default, the bundled `cron_notify.py` script can send direct messages to a Feishu user via `lark-cli`. To configure this, create a local config file `skills/neoalpha/notify-config.json` in your skill directory:
+  ```json
+  {
+    "feishu_user_id": "ou_your_feishu_user_id_here"
+  }
+  ```
+  *(This file is automatically ignored by git to keep your personal identifier private)*. Alternatively, you can export the `FEISHU_NOTIFY_USER_ID` environment variable.
+
+- **Option B: Other Channels (Discord, Telegram, Slack, or Feishu Webhooks)**:
+  If a Feishu user ID is **not** set, `cron_notify.py` elegantly outputs alerts directly to stdout. This allows OpenClaw's native cron engine to intercept the alert and deliver it to whatever target channel is specified in the cron job's `"delivery"` configuration block (e.g., Telegram chat, Discord channel, Slack workspace, or Feishu group).
+
+---
+
 ## Cron Job Setup
 
-Configure 8 cron jobs in OpenClaw. The paths below are relative to your workspace root.
+You must configure 8 background cron jobs in OpenClaw. You can set them up automatically (recommended, especially for AI agents) or manually.
 
-### US Market Jobs
+### Method 1: Automated Registration (Recommended)
+
+The skill includes an automated Python script [setup_cron.py](scripts/setup_cron.py) to configure and register all 8 cron jobs in one go. You can specify your preferred messaging channel and target destination:
+
+- **For Discord / Telegram / Slack / Feishu native delivery**:
+  ```bash
+  python3 skills/neoalpha/scripts/setup_cron.py --channel telegram --to "@your_telegram_chat_or_channel" --force
+  ```
+  *(Change `telegram` to `discord`, `slack`, or `feishu` as appropriate, and specify your exact target destination)*.
+
+- **For Feishu Bot DM (Direct Messages)**:
+  Configure `notify-config.json` as described in step 5, then run:
+  ```bash
+  python3 skills/neoalpha/scripts/setup_cron.py --channel feishu --to "user:ou_your_feishu_user_id_here" --force
+  ```
+
+- **For standard output (local terminal only / no delivery)**:
+  ```bash
+  python3 skills/neoalpha/scripts/setup_cron.py --channel none --force
+  ```
+
+### Method 2: Manual Registration
+
+If you prefer to configure jobs individually, configure the following 8 cron jobs in OpenClaw (paths below are relative to your workspace root):
+
+#### US Market Jobs
 
 | Job ID | Schedule | TZ | Session | Instruction File |
 |--------|----------|-----|---------|-----------------|
@@ -71,7 +143,7 @@ Configure 8 cron jobs in OpenClaw. The paths below are relative to your workspac
 | `market-us-close` | `0 16 * * 1-5` | America/New_York | session:market-us-live-\<date\> | `skills/neoalpha/cron/market-us-close.md` |
 | `market-us-session-reset` | `15 19 * * 1-5` | America/New_York | isolated | `skills/neoalpha/cron/market-us-session-reset.md` |
 
-### HK Market Jobs
+#### HK Market Jobs
 
 | Job ID | Schedule | TZ | Session | Instruction File |
 |--------|----------|-----|---------|-----------------|
@@ -80,7 +152,7 @@ Configure 8 cron jobs in OpenClaw. The paths below are relative to your workspac
 | `market-hk-close` | `0 16 * * 1-5` | Asia/Hong_Kong | session:market-hk-live-\<date\> | `skills/neoalpha/cron/market-hk-close.md` |
 | `market-hk-session-reset` | `15 19 * * 1-5` | Asia/Hong_Kong | isolated | `skills/neoalpha/cron/market-hk-session-reset.md` |
 
-Example command to create a cron job:
+Example command to manually create a single cron job:
 
 ```bash
 openclaw cron add '{
@@ -88,7 +160,7 @@ openclaw cron add '{
   "schedule": {"kind": "cron", "expr": "30 8 * * 1-5", "tz": "America/New_York"},
   "payload": {"kind": "agentTurn", "message": "Read skills/neoalpha/cron/market-us-premarket.md and execute all steps."},
   "sessionTarget": "isolated",
-  "delivery": {"mode": "announce"}
+  "delivery": {"mode": "announce", "channel": "telegram", "to": "@my_channel"}
 }'
 ```
 
@@ -182,6 +254,7 @@ workspace/
 ├── skills/neoalpha/            # Skill root
 │   ├── SKILL.md
 │   ├── INSTALLATION.md                  # This file
+│   ├── notify-config.json               # Local notification settings (gitignored)
 │   ├── cron/                            # Cron instruction files
 │   │   ├── market-us-premarket.md
 │   │   ├── market-us-live.md
@@ -192,6 +265,7 @@ workspace/
 │   │   ├── market-hk-close.md
 │   │   └── market-hk-session-reset.md
 │   ├── scripts/                         # Python helpers
+│   │   ├── cron_notify.py               # Bundled cron notifications dispatcher
 │   │   ├── market_strategy_engine.py
 │   │   ├── portfolio_ledger.py
 │   │   ├── screen_momentum.py

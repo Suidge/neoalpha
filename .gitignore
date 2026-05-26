@@ -7,3 +7,4 @@ thesis-tracker/
 .mypy_cache/
 .ruff_cache/
 *.log
+notify-config.json
