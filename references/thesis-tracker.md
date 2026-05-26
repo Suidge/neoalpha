@@ -2,7 +2,11 @@
 
 ## 文件模板
 
-每个持仓一个文件，存储在 `workspace/skills/investment-system/thesis-tracker/<SYMBOL>.<MARKET>.md`，例如 `INTC.US.md`、`9988.HK.md`
+每个持仓或 watchlist 标的一个文件，默认存储在 `~/Documents/neoalpha/thesis-tracker/`。可用 `INVESTMENT_THESIS_DIR` 覆盖目录。
+
+命名规则：
+- 美股 thesis 保持 Longbridge 标准 symbol：`<SYMBOL>.US.md`，例如 `INTC.US.md`、`TLN.US.md`。
+- 港股/A股 thesis 在 symbol 后追加股票名称：`<CODE>.<MARKET>-<股票名称>.md`，例如 `0700.HK-腾讯控股.md`、`300394.SZ-天孚通信.md`、`603986.SH-兆易创新.md`。
 
 ```markdown
 # [TICKER] - [公司名]
@@ -100,5 +104,5 @@
 - 新建 thesis：只有用户明确要求“记录/建立/跟踪 thesis”时创建。
 - 更新 thesis：重大事件后若用户要求更新，可直接写；若只是普通分析，先展示建议更新内容并确认。
 - Merge 规则：保留原始论点，不覆盖历史；新增证据写入“更新日志”，改变结论时同步更新“当前状态/趋势”。
-- 命名规则：使用 Longbridge 标准 symbol，格式 `<CODE>.<MARKET>.md`。
+- 命名规则：美股使用 Longbridge 标准 symbol，格式 `<SYMBOL>.US.md`；港股/A股使用 `<CODE>.<MARKET>-<股票名称>.md`。脚本按文件名开头的 Longbridge symbol 识别标的。
 - 禁止事项：不写入交易指令，不把目标价/止损价当作确定承诺；涉及交易动作必须标注“不构成投资建议或交易指令”。

@@ -8,7 +8,7 @@
 - 工具静默,禁止输出过程；任何解释下一步、检查文件、等待命令的文字都算失败
 - 必须先读取 compact 数据包,再由模型形成观点
 - 必须写入 `memory/strategies/hk-daily.md`
-- 必须运行 `skills/investment-system/scripts/validate_hk_strategy.py` 并看到通过结果
+- 必须运行 `skills/neoalpha/scripts/validate_hk_strategy.py` 并看到通过结果
 - 最终只输出一次盘前策略简报；未完成写入和校验前禁止结束
 
 ## 执行控制
@@ -25,7 +25,7 @@
 
 ## 执行步骤
 
-1. 运行无参数数据包 wrapper:`skills/investment-system/scripts/build_hk_premarket_pack.py`。
+1. 运行无参数数据包 wrapper:`skills/neoalpha/scripts/build_hk_premarket_pack.py`。
 2. 基于数据包轻量研判:
    - **Preset 选股器**（数据包 `stock_screens` 字段）：读取 `short_term_momentum` 与 `long_term_compounder`，分别作为今日短线盯盘/试仓候选和中长线 thesis/DCF 优先级。**港股任务同时扫描 .HK/.SZ/.SH thesis 标的（A 股纳入港股盘前）**
    - **中期健康度扫描**（数据包 `medium_term_health` 字段）：读取港股指数 + A股指数的 MA20/60/120/250、20日线收复、MACD 零轴、50% 回撤和关键阴线高点，先决定港股+A股同段交易的进攻/防守底色
@@ -73,7 +73,7 @@
    - `short_term_momentum` 的 `Avoid Chase` → 不追高、不新开仓；若已持仓，只作为风险复核
    - `long_term_compounder` 的 `Thesis Candidate` / `DCF Candidate` → 中长线深研优先级，必要时进入 thesis/DCF 更新
    - A 股标的（.SZ/.SH）与港股标的统一排序，按短线/中长线选股器结果分层
-5. 所有涉及个股的可读内容必须同时写代码和股票名称（如 `700.HK 腾讯控股`），不得只写代码。
+5. 所有涉及个股的可读内容必须同时写代码和股票名称（如 `0700.HK 腾讯控股`），不得只写代码。
 6. JSON block 必须使用 ```proactive-trader-strategy 代码块；顶层必须直接是策略对象,不要再包一层 `strategy` 或 `proactive-trader-strategy` key。必须包含：
    - `market_watch.thesis`: 今日市场主假设
    - `market_watch.regime_hypotheses[]`: risk-on/risk-off/恐慌/轮动/震荡等假设、证据、证伪条件
@@ -83,7 +83,7 @@
    - `market_watch.medium_term_health`: 基于 `medium_term_health` 的中期健康度状态、关键证据、收复位、失效位和今日仓位进攻性约束
    - `monitors[]`: 个股层面，每个 monitor 必须包含 `symbol`、`name`、`focus`、`triggers[]`
    **每个 symbol 必须保留完整后缀（如 700.HK、300054.SZ），不得省略为裸数字或短码。** JSON block 写在 `## 机器可读策略` 标题下、四段式人类可读部分之后。
-7. 运行无参数校验 wrapper:`skills/investment-system/scripts/validate_hk_strategy.py`。
+7. 运行无参数校验 wrapper:`skills/neoalpha/scripts/validate_hk_strategy.py`。
 8. 校验通过后,输出一条简洁盘前策略简报（四段式摘要 + 含A股选股器概览）。最终回复只包含简报正文,不得包含校验状态或执行过程说明。若校验始终无法通过,最终回复必须明确以 `[FAILED]` 开头并说明阻断原因,不得伪装成成功简报。
 
 ## 报价与 ADR 规则
@@ -100,6 +100,6 @@
 - 盘中 live 的观察优先级必须是：市场状态假设 → 港股/A股指数联动或背离 → 板块轮动/动量扩散 → 持仓/个股触发。
 - 触发器必须具体、可机器执行。
 - **短线选股器信号优先用于今日加仓/减仓时机判断**，不与价格触发器冲突，两者互补。
-- **策略 YAML 库参考**（`skills/investment-system/strategies/`）：如需调用特定策略框架，读取对应 YAML。
+- **策略 YAML 库参考**（`skills/neoalpha/strategies/`）：如需调用特定策略框架，读取对应 YAML。
 - **A 股标的（.SZ/.SH）的选股器结果与港股并列展示**，不给独立的 A 股板块；A股指数属于市场观察主线，必须进入 `market_watch.benchmarks`。
 - 不确定的新闻或数据必须标注为待确认,禁止编造。

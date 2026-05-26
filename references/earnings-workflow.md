@@ -7,13 +7,13 @@
 
 ### 财报前瞻
 ```bash
-python3 skills/investment-system/scripts/analyze_earnings_preview.py <SYMBOL> --output text
+python3 skills/neoalpha/scripts/analyze_earnings_preview.py <SYMBOL> --output text
 ```
 返回结构化数据：一致预期、EPS 预测、近期财务、估值、财报日历
 
 ### 财报复盘
 ```bash
-python3 skills/investment-system/scripts/analyze_earnings_recap.py <SYMBOL> --output text
+python3 skills/neoalpha/scripts/analyze_earnings_recap.py <SYMBOL> --output text
 ```
 返回结构化数据：实际 vs 预期、营收/利润趋势、毛利率趋势、价格反应
 

@@ -1,6 +1,6 @@
-# Architecture — Investment System
+# Architecture — NeoAlpha
 
-**版本**: 3.0.0 (2026-05-17)
+**Version**: 3.2.5 (2026-05-26)
 
 ## 核心理念
 
@@ -19,7 +19,7 @@
 ## 文件结构
 
 ```text
-skills/investment-system/
+skills/neoalpha/
 ├── SKILL.md
 ├── INSTALLATION.md
 ├── cron/
@@ -47,9 +47,8 @@ skills/investment-system/
 ├── strategies/
 │   └── *.yaml
 ├── templates/
-│   └── thesis-template.md
+│   └── thesis-template.md      # thesis 模板；实际 thesis 默认在 ~/Documents/neoalpha/thesis-tracker/
 ├── references/
-├── thesis-tracker/
 └── tracking/
 ```
 
@@ -103,7 +102,7 @@ memory/strategies/{us,hk}-live-state-YYYY-MM-DD.json
 | 依赖 | 用途 |
 |------|------|
 | longbridge CLI | 行情、新闻、交易日、市场状态 |
-| `skills/investment-system/thesis-tracker/` | 长期论点与关注标的 |
+| `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}` | 长期论点与关注标的 |
 | `memory/strategies/` | 当日策略文件 |
 
 ## Session Lifecycle
@@ -115,7 +114,7 @@ memory/strategies/{us,hk}-live-state-YYYY-MM-DD.json
 | US | `session:market-us-live-<date>` | market-us-live, market-us-close | market-us-session-reset, 19:15 America/New_York |
 | HK | `session:market-hk-live-<date>` | market-hk-live, market-hk-close | market-hk-session-reset, 19:15 Asia/Hong_Kong |
 
-盘前任务保持 `isolated`，确保每天策略制定不被旧上下文污染。盘前数据包会读取可选的主人额外 prompt：`memory/strategies/us-premarket-prompt.md` 或 `memory/strategies/hk-premarket-prompt.md`；文件不存在或为空时不注入，存在时按脚本上限截断。仓位数据优先读取 `memory/strategies/portfolio/positions-current.json`，并以 `positions_tracker.positions` 注入；`positions-tracker.md` 只作为脚本生成的人类阅读版和兼容兜底。盘前数据包会提供 `market_watch_template`，要求模型先写市场主假设、市场特征、板块轮动、动量状态和证伪条件，再写个股监控。港股盘前会同时纳入 .HK/.SZ/.SH 持仓与 A股指数（上证、深成、创业板、沪深300）。港股盘前必须额外读取 `hk_overnight_us_context`：金龙/中概互联网 ETF 与腾讯、阿里、美团、小米 ADR 隔夜美股表现，用于判断恒科开盘情绪；这些数据只能作为隔夜中概情绪线索，不得等同于港股盘前报价。
+盘前任务保持 `isolated`，确保每天策略制定不被旧上下文污染。盘前数据包会读取可选的 user prompt：`memory/strategies/us-premarket-prompt.md` 或 `memory/strategies/hk-premarket-prompt.md`；文件不存在或为空时不注入，存在时按脚本上限截断。仓位数据优先读取 `memory/strategies/portfolio/positions-current.json`，并以 `positions_tracker.positions` 注入；`positions-tracker.md` 只作为脚本生成的人类阅读版和兼容兜底。盘前数据包会提供 `market_watch_template`，要求模型先写市场主假设、市场特征、板块轮动、动量状态和证伪条件，再写个股监控。港股盘前会同时纳入 .HK/.SZ/.SH 持仓与 A股指数（上证、深成、创业板、沪深300）。港股盘前必须额外读取 `hk_overnight_us_context`：金龙/中概互联网 ETF 与腾讯、阿里、美团、小米 ADR 隔夜美股表现，用于判断恒科开盘情绪；这些数据只能作为隔夜中概情绪线索，不得等同于港股盘前报价。
 
 ## Portfolio Ledger
 

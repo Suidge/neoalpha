@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Preset stock screener for investment-system.
+"""Preset stock screener for NeoAlpha.
 
 The screener keeps the existing universe inputs and layers preset scoring on
 top of SMAM momentum results plus thesis-tracker text signals.
@@ -17,9 +17,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
-SKILL = ROOT / "skills" / "investment-system"
+SKILL = ROOT / "skills" / "neoalpha"
 PRESETS_DIR = SKILL / "presets"
-THESIS_DIR = SKILL / "thesis-tracker"
+DEFAULT_THESIS_DIR = Path.home() / "Documents" / "neoalpha" / "thesis-tracker"
+THESIS_DIR = Path(os.environ.get("INVESTMENT_THESIS_DIR", str(DEFAULT_THESIS_DIR))).expanduser()
 MOMENTUM_SCANNER = SKILL / "scripts" / "screen_momentum.py"
 TZ = timezone(timedelta(hours=8))
 
@@ -152,14 +153,33 @@ def load_thesis_symbols(thesis_dir: Path = THESIS_DIR) -> list[str]:
         return []
     symbols = []
     for path in thesis_dir.iterdir():
-        if path.suffix == ".md" and "." in path.stem:
-            symbols.append(path.stem)
+        symbol = thesis_symbol_from_path(path)
+        if symbol:
+            symbols.append(symbol)
     return sorted(symbols)
 
 
+def thesis_symbol_from_path(path: Path) -> str:
+    if path.suffix != ".md":
+        return ""
+    match = re.match(r"^([A-Za-z0-9]+)\.(US|HK|SH|SZ)(?:-.+)?$", path.stem)
+    if not match:
+        return ""
+    return f"{match.group(1)}.{match.group(2)}".upper()
+
+
+def thesis_path(symbol: str, thesis_dir: Path = THESIS_DIR) -> Path | None:
+    exact = thesis_dir / f"{symbol}.md"
+    if exact.exists():
+        return exact
+    code, market = symbol.rsplit(".", 1)
+    matches = sorted(thesis_dir.glob(f"{code}.{market}-*.md"))
+    return matches[0] if matches else None
+
+
 def thesis_text(symbol: str, thesis_dir: Path = THESIS_DIR) -> str:
-    path = thesis_dir / f"{symbol}.md"
-    if not path.exists():
+    path = thesis_path(symbol, thesis_dir)
+    if not path:
         return ""
     return path.read_text(encoding="utf-8", errors="ignore")
 
@@ -322,7 +342,7 @@ def render_table(results: list[dict[str, Any]], preset: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Preset stock screener for investment-system")
+    parser = argparse.ArgumentParser(description="Preset stock screener for NeoAlpha")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--symbols", help="逗号分隔标的列表，如 AAPL.US,MSFT.US,NVDA.US")
     group.add_argument("--from-thesis", action="store_true", help="扫描 thesis-tracker 中所有标的")
@@ -335,7 +355,7 @@ def main() -> None:
     args = parser.parse_args()
 
     preset = load_preset(args.preset)
-    thesis_dir = Path(args.thesis_dir) if args.thesis_dir else THESIS_DIR
+    thesis_dir = Path(args.thesis_dir).expanduser() if args.thesis_dir else THESIS_DIR
 
     if args.momentum_json:
         scan = json.loads(Path(args.momentum_json).read_text(encoding="utf-8"))

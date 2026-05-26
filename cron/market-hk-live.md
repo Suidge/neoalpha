@@ -12,7 +12,7 @@
 
 ## 执行说明
 
-执行无参数 wrapper：`skills/investment-system/scripts/run_hk_live_check.py`。
+执行无参数 wrapper：`skills/neoalpha/scripts/run_hk_live_check.py`。
 
 wrapper 会读取当日 `memory/strategies/hk-daily.md` 的机器可读策略：
 - `market_watch`: 港股+A股市场主假设、risk-on/risk-off/恐慌/轮动/震荡观察、港股/A股指数触发器

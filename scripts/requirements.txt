@@ -1,4 +1,4 @@
-# Investment System — Python Dependencies
+# NeoAlpha — Python Dependencies
 #
 # DCF model generation & validation
 openpyxl>=3.1.0

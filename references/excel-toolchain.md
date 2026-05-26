@@ -21,13 +21,13 @@
 
 ```bash
 python3 -m venv /tmp/financial_xlsx_venv
-/tmp/financial_xlsx_venv/bin/pip install -r skills/investment-system/scripts/requirements.txt
+/tmp/financial_xlsx_venv/bin/pip install -r skills/neoalpha/scripts/requirements.txt
 ```
 
 ## 生成示例模型
 
 ```bash
-/tmp/financial_xlsx_venv/bin/python skills/investment-system/scripts/build_dcf_model.py \
+/tmp/financial_xlsx_venv/bin/python skills/neoalpha/scripts/build_dcf_model.py \
   --output out/model.xlsx
 ```
 
@@ -36,7 +36,7 @@ python3 -m venv /tmp/financial_xlsx_venv
 ## 使用 JSON 输入
 
 ```bash
-/tmp/financial_xlsx_venv/bin/python skills/investment-system/scripts/build_dcf_model.py \
+/tmp/financial_xlsx_venv/bin/python skills/neoalpha/scripts/build_dcf_model.py \
   --input inputs.json \
   --output out/INTC.US-dcf.xlsx \
   --years 5
@@ -90,7 +90,7 @@ python3 -m venv /tmp/financial_xlsx_venv
 第一层：DCF 结构与公式检查。
 
 ```bash
-/tmp/financial_xlsx_venv/bin/python skills/investment-system/scripts/validate_dcf.py \
+/tmp/financial_xlsx_venv/bin/python skills/neoalpha/scripts/validate_dcf.py \
   out/model.xlsx \
   out/validation.json
 ```
@@ -98,7 +98,7 @@ python3 -m venv /tmp/financial_xlsx_venv
 第二层：OfficeCLI OpenXML 校验与 workbook 计算属性设置。
 
 ```bash
-skills/investment-system/scripts/finalize_xlsx_with_officecli.sh \
+skills/neoalpha/scripts/finalize_xlsx_with_officecli.sh \
   out/model.xlsx \
   out/officecli-report.json
 ```
@@ -123,7 +123,7 @@ skills/investment-system/scripts/finalize_xlsx_with_officecli.sh \
 
 ## 当前采用路线（2026-05-11）
 
-主人已决定先采用轻量路线：不安装 LibreOffice，也不做 Microsoft Excel AppleScript 自动化。
+默认采用轻量路线：不安装 LibreOffice，也不做 Microsoft Excel AppleScript 自动化。
 
 当前交付链路：
 

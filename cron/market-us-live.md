@@ -12,7 +12,7 @@
 
 ## 执行说明
 
-执行无参数 wrapper：`skills/investment-system/scripts/run_us_live_check.py`。
+执行无参数 wrapper：`skills/neoalpha/scripts/run_us_live_check.py`。
 
 wrapper 会读取当日 `memory/strategies/us-daily.md` 的机器可读策略：
 - `market_watch`: 盘前市场主假设、risk-on/risk-off/恐慌/轮动/震荡观察、指数/跨资产触发器

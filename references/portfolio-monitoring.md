@@ -15,7 +15,7 @@
 | 数据 | 来源 |
 |------|------|
 | 持仓 | `memory/strategies/portfolio/positions-current.json`（优先）/ Longbridge positions / `positions-tracker.md` 兼容阅读版 |
-| thesis | `skills/investment-system/thesis-tracker/*.md` |
+| thesis | `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}/*.md` |
 | 行情/估值 | Longbridge quote、valuation、kline |
 | 新闻/催化剂 | Longbridge news、filing、catalyst-calendar |
 | 动量 | `screen_momentum.py` / SMAM |

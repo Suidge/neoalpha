@@ -12,7 +12,7 @@
 ### Step 0: 自动化数据获取（优先）
 
 ```bash
-python3 skills/investment-system/scripts/analyze_earnings_preview.py <SYMBOL> --output text
+python3 skills/neoalpha/scripts/analyze_earnings_preview.py <SYMBOL> --output text
 ```
 
 脚本自动获取：一致预期、EPS 预测、近期财务、估值、财报日历。

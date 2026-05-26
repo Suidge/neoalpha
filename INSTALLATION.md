@@ -1,4 +1,4 @@
-# Investment System — Installation Guide
+# NeoAlpha — Installation Guide
 
 ## Prerequisites
 
@@ -21,7 +21,7 @@ python3 --version
 
 ### 1. Copy the skill directory
 
-Copy `investment-system/` into your OpenClaw workspace:
+Copy the NeoAlpha skill directory into your OpenClaw workspace. The local directory may remain `investment-system` for compatibility with existing commands:
 
 ```bash
 cp -r investment-system/ ~/.openclaw/workspace/skills/
@@ -40,18 +40,19 @@ mkdir -p ~/.openclaw/workspace/memory/strategies/portfolio
 Copy templates to the runtime directory:
 
 ```bash
-cp skills/investment-system/templates/us-premarket-prompt.example.md memory/strategies/us-premarket-prompt.md
-cp skills/investment-system/templates/hk-premarket-prompt.example.md memory/strategies/hk-premarket-prompt.md
+cp skills/neoalpha/templates/us-premarket-prompt.example.md memory/strategies/us-premarket-prompt.md
+cp skills/neoalpha/templates/hk-premarket-prompt.example.md memory/strategies/hk-premarket-prompt.md
 ```
 
 Edit prompt templates to match your current focus areas. Portfolio positions are managed through the ledger helper, not by manually editing `positions-tracker.md`.
 
 ### 4. Create your thesis tracker
 
-Create thesis files in `skills/investment-system/thesis-tracker/` for stocks you want to monitor:
+Create thesis files in `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}` for stocks you want to monitor:
 
 ```bash
-cp skills/investment-system/templates/thesis-template.md skills/investment-system/thesis-tracker/AAPL.US.md
+mkdir -p "${INVESTMENT_THESIS_DIR:-$HOME/Documents/neoalpha/thesis-tracker}"
+cp skills/neoalpha/templates/thesis-template.md "${INVESTMENT_THESIS_DIR:-$HOME/Documents/neoalpha/thesis-tracker}/AAPL.US.md"
 # Edit AAPL.US.md with your thesis
 ```
 
@@ -65,19 +66,19 @@ Configure 8 cron jobs in OpenClaw. The paths below are relative to your workspac
 
 | Job ID | Schedule | TZ | Session | Instruction File |
 |--------|----------|-----|---------|-----------------|
-| `market-us-premarket` | `30 8 * * 1-5` | America/New_York | isolated | `skills/investment-system/cron/market-us-premarket.md` |
-| `market-us-live` | `*/30 9-15 * * 1-5` | America/New_York | session:market-us-live-\<date\> | `skills/investment-system/cron/market-us-live.md` |
-| `market-us-close` | `0 16 * * 1-5` | America/New_York | session:market-us-live-\<date\> | `skills/investment-system/cron/market-us-close.md` |
-| `market-us-session-reset` | `15 19 * * 1-5` | America/New_York | isolated | `skills/investment-system/cron/market-us-session-reset.md` |
+| `market-us-premarket` | `30 8 * * 1-5` | America/New_York | isolated | `skills/neoalpha/cron/market-us-premarket.md` |
+| `market-us-live` | `*/30 9-15 * * 1-5` | America/New_York | session:market-us-live-\<date\> | `skills/neoalpha/cron/market-us-live.md` |
+| `market-us-close` | `0 16 * * 1-5` | America/New_York | session:market-us-live-\<date\> | `skills/neoalpha/cron/market-us-close.md` |
+| `market-us-session-reset` | `15 19 * * 1-5` | America/New_York | isolated | `skills/neoalpha/cron/market-us-session-reset.md` |
 
 ### HK Market Jobs
 
 | Job ID | Schedule | TZ | Session | Instruction File |
 |--------|----------|-----|---------|-----------------|
-| `market-hk-premarket` | `30 8 * * 1-5` | Asia/Hong_Kong | isolated | `skills/investment-system/cron/market-hk-premarket.md` |
-| `market-hk-live` | `*/30 9-15 * * 1-5` | Asia/Hong_Kong | session:market-hk-live-\<date\> | `skills/investment-system/cron/market-hk-live.md` |
-| `market-hk-close` | `0 16 * * 1-5` | Asia/Hong_Kong | session:market-hk-live-\<date\> | `skills/investment-system/cron/market-hk-close.md` |
-| `market-hk-session-reset` | `15 19 * * 1-5` | Asia/Hong_Kong | isolated | `skills/investment-system/cron/market-hk-session-reset.md` |
+| `market-hk-premarket` | `30 8 * * 1-5` | Asia/Hong_Kong | isolated | `skills/neoalpha/cron/market-hk-premarket.md` |
+| `market-hk-live` | `*/30 9-15 * * 1-5` | Asia/Hong_Kong | session:market-hk-live-\<date\> | `skills/neoalpha/cron/market-hk-live.md` |
+| `market-hk-close` | `0 16 * * 1-5` | Asia/Hong_Kong | session:market-hk-live-\<date\> | `skills/neoalpha/cron/market-hk-close.md` |
+| `market-hk-session-reset` | `15 19 * * 1-5` | Asia/Hong_Kong | isolated | `skills/neoalpha/cron/market-hk-session-reset.md` |
 
 Example command to create a cron job:
 
@@ -85,7 +86,7 @@ Example command to create a cron job:
 openclaw cron add '{
   "name": "market-us-premarket",
   "schedule": {"kind": "cron", "expr": "30 8 * * 1-5", "tz": "America/New_York"},
-  "payload": {"kind": "agentTurn", "message": "Read skills/investment-system/cron/market-us-premarket.md and execute all steps."},
+  "payload": {"kind": "agentTurn", "message": "Read skills/neoalpha/cron/market-us-premarket.md and execute all steps."},
   "sessionTarget": "isolated",
   "delivery": {"mode": "announce"}
 }'
@@ -99,7 +100,7 @@ openclaw cron add '{
 
 ```bash
 cd ~/.openclaw/workspace
-python3 skills/investment-system/scripts/build_us_premarket_pack.py | python3 -m json.tool | head -40
+python3 skills/neoalpha/scripts/build_us_premarket_pack.py | python3 -m json.tool | head -40
 ```
 
 Expected: JSON with `market`, `date`, `index_quotes`, `monitors`, `news_titles` fields.
@@ -120,7 +121,7 @@ Check output:
 
 ```bash
 cd ~/.openclaw/workspace
-python3 skills/investment-system/scripts/run_us_live_check.py
+python3 skills/neoalpha/scripts/run_us_live_check.py
 ```
 
 Expected: `NO_REPLY` (no triggers hit) or incremental alert.
@@ -129,11 +130,11 @@ Expected: `NO_REPLY` (no triggers hit) or incremental alert.
 
 ### Tracking list
 
-Edit `skills/investment-system/tracking/us-market-assets.md` to adjust the asset universe scanned in premarket. The file defines which ETFs, indices, and macro assets are included in the premarket data pack.
+Edit `skills/neoalpha/tracking/us-market-assets.md` to adjust the asset universe scanned in premarket. The file defines which ETFs, indices, and macro assets are included in the premarket data pack.
 
 ### Individual thesis
 
-Each thesis file in `thesis-tracker/` follows the template at `templates/thesis-template.md`. Required sections:
+Each thesis file in `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}` follows the template at `templates/thesis-template.md`. Required sections:
 
 - `## 论点陈述` — investment thesis (extracted by script for focus field)
 - Key price levels (support/resistance for trigger generation)
@@ -158,7 +159,7 @@ memory/strategies/positions-tracker.md
 Only `transactions.csv` is the source of truth. Record natural-language trade descriptions with:
 
 ```bash
-python3 skills/investment-system/scripts/portfolio_ledger.py record "14.49买进1000股POET"
+python3 skills/neoalpha/scripts/portfolio_ledger.py record "14.49买进1000股POET"
 ```
 
 The helper rebuilds `positions-current.json` for premarket cron and regenerates `positions-tracker.md` as a human-readable compatibility file.
@@ -168,17 +169,17 @@ The helper rebuilds `positions-current.json` for premarket cron and regenerates 
 | Problem | Check |
 |---------|-------|
 | "Longbridge quote 无返回" | Verify `longbridge` CLI works: `longbridge quote AAPL.US` |
-| Premarket cron fails silently | Check the data pack output: `python3 skills/investment-system/scripts/build_us_premarket_pack.py` |
-| Strategy file has bare tickers (no `.US`) | Run `python3 skills/investment-system/scripts/validate_us_strategy.py` — validation catches suffix errors |
+| Premarket cron fails silently | Check the data pack output: `python3 skills/neoalpha/scripts/build_us_premarket_pack.py` |
+| Strategy file has bare tickers (no `.US`) | Run `python3 skills/neoalpha/scripts/validate_us_strategy.py` — validation catches suffix errors |
 | Live cron times out | Increase `timeoutSeconds` on the cron job (recommended: 240s for live) |
 | Strategy appears stale | Confirm `memory/strategies/us-daily.md` has today's date in the JSON block |
-| Thesis tracker not included | Verify file naming: must be `{SYMBOL}.US.md` or `{SYMBOL}.HK.md` in `thesis-tracker/` |
+| Thesis tracker not included | Verify file naming: US must be `{SYMBOL}.US.md`; HK/CN must be `{CODE}.{HK|SH|SZ}-{CompanyName}.md` in `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}` |
 
 ## Directory Structure After Install
 
 ```
 workspace/
-├── skills/investment-system/            # Skill root
+├── skills/neoalpha/            # Skill root
 │   ├── SKILL.md
 │   ├── INSTALLATION.md                  # This file
 │   ├── cron/                            # Cron instruction files
@@ -206,7 +207,6 @@ workspace/
 │   ├── strategies/                      # Strategy YAML library
 │   ├── templates/                       # User-editable templates
 │   ├── references/                      # Analysis framework references
-│   ├── thesis-tracker/                  # Long-term stock theses (user-maintained)
 │   └── tracking/                        # Asset tracking list
 └── memory/strategies/                   # Runtime output (gitignored)
     ├── us-daily.md                      # Daily US strategy
@@ -223,6 +223,6 @@ workspace/
 
 ## Updating
 
-To update the skill, replace files in `skills/investment-system/` with the new version. Your thesis-tracker files, tracking list, and `memory/strategies/` runtime files are safe (they are not part of the skill source).
+To update the skill, replace files in `skills/neoalpha/` with the new version. Your external thesis-tracker files under `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}`, tracking list, and `memory/strategies/` runtime files are safe.
 
 After updating, restart any affected cron sessions or wait for the next scheduled run.

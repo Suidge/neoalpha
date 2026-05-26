@@ -25,11 +25,13 @@ Stock Momentum Scanner — 基于 Asness, Moskowitz & Pedersen (2013)
 
 import json
 import math
+import re
 import subprocess
 import sys
 import os
 from datetime import datetime, timedelta
 from collections import defaultdict
+from pathlib import Path
 
 
 # ── 信号权重（来自论文 + 实证调优） ──
@@ -446,12 +448,11 @@ def print_table(results: list[dict], with_value: bool = False):
 
 def load_thesis_symbols(thesis_dir: str = None) -> list[str]:
     """
-    从 investment-system/thesis-tracker 目录读取所有 thesis 标的。
+    从 thesis tracker 目录读取所有 thesis 标的。
     """
     if thesis_dir is None:
-        # 尝试默认路径
-        workspace = os.environ.get("OPENCLAW_WORKSPACE", os.path.expanduser("~/.openclaw/workspace"))
-        thesis_dir = os.path.join(workspace, "skills", "investment-system", "thesis-tracker")
+        default_thesis_dir = Path.home() / "Documents" / "neoalpha" / "thesis-tracker"
+        thesis_dir = os.environ.get("INVESTMENT_THESIS_DIR", str(default_thesis_dir))
 
     symbols = []
     if not os.path.isdir(thesis_dir):
@@ -459,9 +460,9 @@ def load_thesis_symbols(thesis_dir: str = None) -> list[str]:
         return symbols
 
     for fname in os.listdir(thesis_dir):
-        if fname.endswith(".md") and "." in fname.replace(".md", ""):
-            # 格式: <CODE>.<MARKET>.md
-            symbol = fname.replace(".md", "")
+        match = re.match(r"^([A-Za-z0-9]+)\.(US|HK|SH|SZ)(?:-.+)?\.md$", fname)
+        if match:
+            symbol = f"{match.group(1)}.{match.group(2)}".upper()
             symbols.append(symbol)
 
     return sorted(symbols)

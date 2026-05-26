@@ -9,7 +9,7 @@
 
 ## 一、框架定位
 
-当前 thesis 模板（`skills/investment-system/templates/thesis-template.md`）提供基础结构。本增强框架在现有模板之上加入：
+当前 thesis 模板（`skills/neoalpha/templates/thesis-template.md`）提供基础结构。本增强框架在现有模板之上加入：
 
 1. **任务锁定与周期定位**（Step 0-1）— 在研究前明确分析边界
 2. **产业链趋势三要素**（Step 2）— 供需 × 价格 × 海外验证

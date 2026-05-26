@@ -10,7 +10,7 @@
 
 ## 执行说明
 
-执行无参数 wrapper：`skills/investment-system/scripts/generate_us_close_review.py`。
+执行无参数 wrapper：`skills/neoalpha/scripts/generate_us_close_review.py`。
 
 ## 成功标准
 

@@ -132,7 +132,7 @@
 ## 文件组织
 
 - 研究过程笔记：必要时写入 `memory/projects/` 或临时工作文档。
-- 长期跟踪结果：写入 `skills/investment-system/thesis-tracker/<SYMBOL>.<MARKET>.md`。
+- 长期跟踪结果：写入 `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}`；美股文件名为 `<SYMBOL>.US.md`，港股/A股文件名为 `<CODE>.<MARKET>-<股票名称>.md`。
 - 模型文件：如生成 xlsx，文件名包含 symbol、日期、模型类型。
 
 ## 禁止事项

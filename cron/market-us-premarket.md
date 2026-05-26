@@ -8,7 +8,7 @@
 - 工具静默,禁止输出过程；任何解释下一步、检查文件、等待命令的文字都算失败
 - 必须先读取 compact 数据包,再由模型形成观点
 - 必须写入 `memory/strategies/us-daily.md`
-- 必须运行 `skills/investment-system/scripts/validate_us_strategy.py` 并看到通过结果
+- 必须运行 `skills/neoalpha/scripts/validate_us_strategy.py` 并看到通过结果
 - 最终只输出一次盘前策略简报；未完成写入和校验前禁止结束
 
 ## 执行控制
@@ -25,7 +25,7 @@
 
 ## 执行步骤
 
-1. 运行无参数数据包 wrapper:`skills/investment-system/scripts/build_us_premarket_pack.py`。
+1. 运行无参数数据包 wrapper:`skills/neoalpha/scripts/build_us_premarket_pack.py`。
 2. 基于数据包轻量研判:
    - **Preset 选股器**（数据包 `stock_screens` 字段）：读取 `short_term_momentum` 与 `long_term_compounder`，分别作为今日短线盯盘/试仓候选和中长线 thesis/DCF 优先级
    - **中期健康度扫描**（数据包 `medium_term_health` 字段）：读取指数/ETF 的 MA20/60/120/250、20日线收复、MACD 零轴、50% 回撤和关键阴线高点，先决定今日进攻/防守底色
@@ -80,7 +80,7 @@
    - `market_watch.medium_term_health`: 基于 `medium_term_health` 的中期健康度状态、关键证据、收复位、失效位和今日仓位进攻性约束
    - `monitors[]`: 个股层面，每个 monitor 必须包含 `symbol`、`name`、`focus`、`triggers[]`
    **每个 symbol 必须保留完整后缀（如 NVDA.US），不得省略为裸 ticker。** JSON block 写在 `## 机器可读策略` 标题下、四段式人类可读部分之后。
-7. 运行无参数校验 wrapper:`skills/investment-system/scripts/validate_us_strategy.py`。
+7. 运行无参数校验 wrapper:`skills/neoalpha/scripts/validate_us_strategy.py`。
 8. 校验通过后,输出一条简洁盘前策略简报（四段式摘要）。最终回复只包含简报正文,不得包含校验状态或执行过程说明。若校验始终无法通过,最终回复必须明确以 `[FAILED]` 开头并说明阻断原因,不得伪装成成功简报。
 
 ## 报价与宏观规则
@@ -96,5 +96,5 @@
 - 盘中 live 的观察优先级必须是：市场状态假设 → 大类资产/指数 → 板块轮动/动量扩散 → 持仓/个股触发。
 - 触发器必须具体、可机器执行。
 - **短线选股器信号优先用于今日加仓/减仓时机判断**，不与价格触发器冲突，两者互补。
-- **策略 YAML 库参考**（`skills/investment-system/strategies/`）：如需调用特定策略框架，读取对应 YAML。
+- **策略 YAML 库参考**（`skills/neoalpha/strategies/`）：如需调用特定策略框架，读取对应 YAML。
 - 不确定的新闻或数据必须标注为待确认,禁止编造。

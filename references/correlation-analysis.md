@@ -208,7 +208,7 @@ def build_correlation_context(symbols):
 
 ### 6.2 调用入口
 
-当主人问"XXX 和 YYY 的相关性"或"我的持仓相关性"时，优先使用本参考文档的分析框架，配合 Longbridge CLI 获取数据。
+当用户问"XXX 和 YYY 的相关性"或"我的持仓相关性"时，优先使用本参考文档的分析框架，配合 Longbridge CLI 获取数据。
 
 ---
 

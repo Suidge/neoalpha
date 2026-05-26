@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Portfolio ledger helper for investment-system.
+"""Portfolio ledger helper for NeoAlpha.
 
 The transaction ledger is the source of truth. Derived position snapshots and
 Markdown are rebuilt from it.
@@ -10,6 +10,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import os
 import re
 import sys
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -17,8 +18,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
-SKILL = ROOT / "skills" / "investment-system"
-THESIS_DIR = SKILL / "thesis-tracker"
+SKILL = ROOT / "skills" / "neoalpha"
+DEFAULT_THESIS_DIR = Path.home() / "Documents" / "neoalpha" / "thesis-tracker"
+THESIS_DIR = Path(os.environ.get("INVESTMENT_THESIS_DIR", str(DEFAULT_THESIS_DIR))).expanduser()
 STRATEGY_DIR = ROOT / "memory" / "strategies"
 PORTFOLIO_DIR = STRATEGY_DIR / "portfolio"
 TRANSACTIONS_CSV = PORTFOLIO_DIR / "transactions.csv"
@@ -118,6 +120,24 @@ def load_instruments() -> dict[str, dict[str, str]]:
     return instruments
 
 
+def thesis_symbol_from_path(path: Path) -> str:
+    if path.suffix != ".md":
+        return ""
+    match = re.match(r"^([A-Za-z0-9]+)\.(US|HK|SH|SZ)(?:-.+)?$", path.stem)
+    if not match:
+        return ""
+    return f"{match.group(1)}.{match.group(2)}".upper()
+
+
+def thesis_path(symbol: str) -> Path | None:
+    exact = THESIS_DIR / f"{symbol}.md"
+    if exact.exists():
+        return exact
+    code, market = symbol.rsplit(".", 1)
+    matches = sorted(THESIS_DIR.glob(f"{code}.{market}-*.md"))
+    return matches[0] if matches else None
+
+
 def infer_symbol(raw_symbol: str, instruments: dict[str, dict[str, str]]) -> str:
     symbol = raw_symbol.strip().upper()
     if "." in symbol:
@@ -125,7 +145,8 @@ def infer_symbol(raw_symbol: str, instruments: dict[str, dict[str, str]]) -> str
     for candidate in instruments:
         if candidate.split(".", 1)[0] == symbol:
             return candidate
-    thesis_matches = sorted(p.stem for p in THESIS_DIR.glob(f"{symbol}.*.md"))
+    thesis_matches = sorted(filter(None, (thesis_symbol_from_path(p) for p in THESIS_DIR.glob(f"{symbol}.*.md"))))
+    thesis_matches.extend(sorted(filter(None, (thesis_symbol_from_path(p) for p in THESIS_DIR.glob(f"{symbol}.*-*.md")))))
     if thesis_matches:
         return thesis_matches[0]
     if re.fullmatch(r"\d{4,5}", symbol):
@@ -139,8 +160,8 @@ def symbol_name(symbol: str, instruments: dict[str, dict[str, str]]) -> str:
     meta = instruments.get(symbol, {})
     if meta.get("name"):
         return meta["name"]
-    thesis = THESIS_DIR / f"{symbol}.md"
-    if thesis.exists():
+    thesis = thesis_path(symbol)
+    if thesis:
         first = thesis.read_text(errors="replace").splitlines()[:1]
         if first and first[0].startswith("# "):
             title = first[0].lstrip("# ").strip()
@@ -314,7 +335,7 @@ def rebuild() -> dict[str, Any]:
             "cost_basis": decimal_text(pos["cost_basis"], "0.01"),
             "realized_pnl": decimal_text(pos["realized_pnl"], "0.01"),
             "last_trade_date": pos["last_trade_date"],
-            "thesis": str((THESIS_DIR / f"{pos['symbol']}.md").relative_to(ROOT)) if (THESIS_DIR / f"{pos['symbol']}.md").exists() else "",
+            "thesis": str(thesis_path(pos["symbol"]) or ""),
         })
     serializable.sort(key=lambda x: (x["market"], x["symbol"]))
 

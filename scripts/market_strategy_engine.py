@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Market strategy engine for investment-system cron workflows.
+"""Market strategy engine for NeoAlpha cron workflows.
 
 Subcommands:
   premarket --market US|HK  Generate a structured daily strategy markdown file.
@@ -24,8 +24,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from market_health_scan import scan_market_health
 
 ROOT = Path(__file__).resolve().parents[3]
-SKILL = ROOT / "skills" / "investment-system"
-THESIS_DIR = SKILL / "thesis-tracker"
+SKILL = ROOT / "skills" / "neoalpha"
+DEFAULT_THESIS_DIR = Path.home() / "Documents" / "neoalpha" / "thesis-tracker"
+THESIS_DIR = Path(os.environ.get("INVESTMENT_THESIS_DIR", str(DEFAULT_THESIS_DIR))).expanduser()
 STOCK_SCREENER = SKILL / "scripts" / "screen_stocks.py"
 STRATEGY_DIR = ROOT / "memory" / "strategies"
 ASSETS_FILE = SKILL / "tracking" / "us-market-assets.md"
@@ -37,7 +38,12 @@ POSITIONS_TRACKER = STRATEGY_DIR / "positions-tracker.md"
 POSITIONS_CURRENT = STRATEGY_DIR / "portfolio" / "positions-current.json"
 TZ = dt.timezone(dt.timedelta(hours=8))
 TODAY = dt.datetime.now(TZ).date().isoformat()
-MARKET_TZ = {"US": ZoneInfo("America/New_York"), "HK": ZoneInfo("Asia/Hong_Kong")}
+MARKET_TZ = {"US": ZoneInfo("America/New_York"), "HK": ZoneInfo("Asia/Hong_Kong"), "CN": ZoneInfo("Asia/Shanghai")}
+MARKET_SESSIONS = {
+    "US": (dt.time(9, 30), dt.time(16, 0)),
+    "HK": (dt.time(9, 30), dt.time(16, 0)),
+    "CN": (dt.time(9, 30), dt.time(15, 0)),
+}
 MAX_OWNER_PROMPT_CHARS = 800
 MAX_POSITIONS_TRACKER_CHARS = 1400
 MAX_NEWS_TITLES = 5
@@ -124,6 +130,17 @@ def canonical_symbol(symbol: str) -> str:
     if dotted in SYMBOL_NAME_FALLBACKS:
         return dotted
     return symbol
+
+
+def symbol_market_code(symbol: str) -> Optional[str]:
+    symbol = canonical_symbol(symbol)
+    if symbol.endswith(".HK"):
+        return "HK"
+    if symbol.endswith(".SH") or symbol.endswith(".SZ"):
+        return "CN"
+    if symbol.endswith(".US"):
+        return "US"
+    return None
 
 
 def run(cmd: List[str], timeout: int = 35) -> Tuple[int, str, str]:
@@ -226,6 +243,24 @@ def relpath(path: Path) -> str:
         return str(path)
 
 
+def thesis_symbol_from_path(path: Path) -> str:
+    if path.suffix != ".md":
+        return ""
+    match = re.match(r"^([A-Za-z0-9]+)\.(US|HK|SH|SZ)(?:-.+)?$", path.stem)
+    if not match:
+        return ""
+    return f"{match.group(1)}.{match.group(2)}".upper()
+
+
+def thesis_path(symbol: str) -> Optional[Path]:
+    exact = THESIS_DIR / f"{symbol}.md"
+    if exact.exists():
+        return exact
+    code, market = symbol.rsplit(".", 1)
+    matches = sorted(THESIS_DIR.glob(f"{code}.{market}-*.md"))
+    return matches[0] if matches else None
+
+
 def prune_empty(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: v for k, v in ((k, prune_empty(v)) for k, v in value.items()) if v not in (None, [], {}, "")}
@@ -245,8 +280,8 @@ def quote_display_name(row: Optional[Dict[str, Any]]) -> str:
 
 
 def thesis_name(symbol: str) -> str:
-    p = THESIS_DIR / f"{symbol}.md"
-    if not p.exists():
+    p = thesis_path(symbol)
+    if not p:
         return ""
     first = p.read_text(errors="replace").splitlines()[:1]
     if not first or not first[0].startswith("# "):
@@ -373,8 +408,11 @@ def market_suffixes(market: str) -> List[str]:
 
 def thesis_symbols(market: str) -> List[str]:
     symbols = []
-    for suffix in market_suffixes(market):
-        symbols.extend(p.stem for p in THESIS_DIR.glob(f"*{suffix}.md"))
+    suffixes = tuple(market_suffixes(market))
+    for path in THESIS_DIR.glob("*.md"):
+        symbol = thesis_symbol_from_path(path)
+        if symbol.endswith(suffixes):
+            symbols.append(symbol)
     return sorted(set(symbols))
 
 
@@ -427,8 +465,8 @@ def run_stock_screen(symbols: List[str], preset: str, top: int = 10) -> Dict[str
 
 
 def thesis_summary(symbol: str, max_chars: int = 120) -> str:
-    p = THESIS_DIR / f"{symbol}.md"
-    if not p.exists():
+    p = thesis_path(symbol)
+    if not p:
         return ""
     txt = p.read_text(errors="replace")
     m = re.search(r"## 论点陈述\n(.+?)(?:\n## |\Z)", txt, re.S)
@@ -464,33 +502,57 @@ def load_strategy(path: Path, market: str) -> Tuple[str, Optional[Dict[str, Any]
     return text, data
 
 
-def market_is_trading_day(market: str, date: Optional[str] = None) -> bool:
-    date = date or market_today(market)
-    data = safe_longbridge_json(["trading", "days", MARKET_CONFIG[market]["market_code"], "--start", date, "--end", date], timeout=20)
+def market_code_today(code: str) -> str:
+    return dt.datetime.now(MARKET_TZ.get(code, TZ)).date().isoformat()
+
+
+def market_code_is_trading_day(code: str, date: Optional[str] = None) -> bool:
+    date = date or market_code_today(code)
+    data = safe_longbridge_json(["trading", "days", code, "--start", date, "--end", date], timeout=20)
     days = (data or {}).get("trading_days") if isinstance(data, dict) else None
     return date in (days or [])
 
 
-def market_status(market: str) -> str:
+def market_statuses() -> Dict[str, str]:
     data = safe_longbridge_json(["market-status"], timeout=20)
+    statuses: Dict[str, str] = {}
     if isinstance(data, list):
         for r in data:
-            if r.get("market") == MARKET_CONFIG[market]["market_code"]:
-                return r.get("status", "Unknown")
-    return "Unknown"
+            if isinstance(r, dict) and r.get("market"):
+                statuses[str(r["market"])] = str(r.get("status", "Unknown"))
+    return statuses
+
+
+def market_code_status(code: str) -> str:
+    return market_statuses().get(code, "Unknown")
+
+
+def market_is_trading_day(market: str, date: Optional[str] = None) -> bool:
+    return market_code_is_trading_day(MARKET_CONFIG[market]["market_code"], date)
+
+
+def market_status(market: str) -> str:
+    return market_code_status(MARKET_CONFIG[market]["market_code"])
 
 
 def regular_session_window(market: str) -> Tuple[dt.time, dt.time]:
-    return dt.time(9, 30), dt.time(16, 0)
+    return MARKET_SESSIONS[MARKET_CONFIG[market]["market_code"]]
+
+
+def market_code_regular_session_is_active(code: str, now: Optional[dt.datetime] = None) -> bool:
+    """Return whether a market code is in a live regular session now."""
+    if market_code_status(code) == "Trading":
+        return True
+    local_now = now.astimezone(MARKET_TZ[code]) if now else dt.datetime.now(MARKET_TZ[code])
+    start, end = MARKET_SESSIONS[code]
+    if not (start <= local_now.time() < end):
+        return False
+    return market_code_is_trading_day(code, local_now.date().isoformat())
 
 
 def regular_session_is_active(market: str, now: Optional[dt.datetime] = None) -> bool:
     """Guard live alerts from using stale prior-session quote changes before open."""
-    local_now = now.astimezone(MARKET_TZ[market]) if now else dt.datetime.now(MARKET_TZ[market])
-    start, end = regular_session_window(market)
-    if not (start <= local_now.time() < end):
-        return False
-    return market_is_trading_day(market, local_now.date().isoformat())
+    return market_code_regular_session_is_active(MARKET_CONFIG[market]["market_code"], now)
 
 
 def trigger_set(symbol: str, row: Optional[Dict[str, Any]], market: str) -> List[Dict[str, Any]]:
@@ -840,6 +902,24 @@ def market_watch_symbols(data: Dict[str, Any], market: str) -> List[str]:
     return sorted(set(symbols))
 
 
+def active_market_codes_for_symbols(symbols: Iterable[str], now: Optional[dt.datetime] = None) -> set[str]:
+    codes = {code for sym in symbols if (code := symbol_market_code(sym))}
+    return {code for code in codes if market_code_regular_session_is_active(code, now)}
+
+
+def traded_market_codes_for_symbols(symbols: Iterable[str]) -> set[str]:
+    codes = {code for sym in symbols if (code := symbol_market_code(sym))}
+    return {code for code in codes if market_code_is_trading_day(code)}
+
+
+def display_market_scope(default_label: str, codes: set[str]) -> str:
+    if codes == {"CN"}:
+        return "A股"
+    if codes == {"HK", "CN"}:
+        return "港股/A股"
+    return default_label
+
+
 def default_market_watch_triggers(symbol: str, market: str) -> List[Dict[str, Any]]:
     if symbol == ".VIX.US":
         return [
@@ -1008,8 +1088,6 @@ def build_premarket_pack(market: str) -> str:
 
 def live_check(market: str) -> str:
     cfg = MARKET_CONFIG[market]
-    if not regular_session_is_active(market):
-        return "NO_REPLY"
     text, data = load_strategy(cfg["strategy"], market)
     if data:
         monitors = data.get("monitors", [])
@@ -1019,12 +1097,24 @@ def live_check(market: str) -> str:
     symbols = [m["symbol"] for m in monitors]
     market_symbols = market_watch_symbols(data or {}, market)
     quote_symbols = sorted(set(symbols + market_symbols))
+    active_codes = active_market_codes_for_symbols(quote_symbols)
+    if not active_codes:
+        return "NO_REPLY"
+    monitors = [m for m in monitors if symbol_market_code(m.get("symbol", "")) in active_codes]
+    symbols = [m["symbol"] for m in monitors]
+    market_symbols = [s for s in market_symbols if symbol_market_code(s) in active_codes]
+    quote_symbols = sorted(set(symbols + market_symbols))
     if not quote_symbols:
         return "NO_REPLY"
     quotes = quote(quote_symbols)
     state = load_live_state(market)
     state["last_run_at"] = now_iso()
-    state["runs"].append({"ts": state["last_run_at"], "symbols": len(symbols), "market_symbols": len(market_symbols)})
+    state["runs"].append({
+        "ts": state["last_run_at"],
+        "symbols": len(symbols),
+        "market_symbols": len(market_symbols),
+        "active_market_codes": sorted(active_codes),
+    })
     state["runs"] = state["runs"][-32:]
     alerts = []
     repeat_lines = []
@@ -1106,13 +1196,12 @@ def live_check(market: str) -> str:
         parts.append("\n\n".join(alerts))
     if repeat_lines:
         parts.append("重复触发简报:\n" + "\n".join(repeat_lines[:8]))
-    return f"📈 {market_today(market)} {cfg['cn']}盘中播报\n\n" + "\n\n".join(parts)
+    scope = display_market_scope(cfg["cn"], active_codes) if market == "HK" else cfg["cn"]
+    return f"📈 {market_today(market)} {scope}盘中播报\n\n" + "\n\n".join(parts)
 
 
 def close_review(market: str) -> str:
     cfg = MARKET_CONFIG[market]
-    if not market_is_trading_day(market):
-        return "NO_REPLY"
     text, data = load_strategy(cfg["strategy"], market)
     if data:
         monitors = data.get("monitors", [])
@@ -1121,9 +1210,15 @@ def close_review(market: str) -> str:
         symbols = extract_symbols_from_strategy(text, market) or thesis_symbols(market) or cfg["default_symbols"]
         monitors = [{"symbol": s, "focus": thesis_summary(s), "triggers": trigger_set(s, None, market)} for s in symbols]
     symbols = sorted(set(symbols + cfg["index_symbols"]))
+    traded_codes = traded_market_codes_for_symbols(symbols)
+    if not traded_codes:
+        return "NO_REPLY"
+    monitors = [m for m in monitors if symbol_market_code(m.get("symbol", "")) in traded_codes]
+    symbols = sorted(s for s in symbols if symbol_market_code(s) in traded_codes)
     quotes = quote(symbols)
     state = load_live_state(market)
-    idx = " | ".join(f"{display_symbol(s, quotes.get(s))}: {fmt_price(quotes.get(s))}" for s in cfg["index_symbols"] if s in quotes) or "N/A"
+    active_index_symbols = [s for s in cfg["index_symbols"] if symbol_market_code(s) in traded_codes]
+    idx = " | ".join(f"{display_symbol(s, quotes.get(s))}: {fmt_price(quotes.get(s))}" for s in active_index_symbols if s in quotes) or "N/A"
     movers = []
     triggered = []
     quiet = 0
@@ -1150,17 +1245,25 @@ def close_review(market: str) -> str:
             quiet += 1
     movers = sorted(movers, reverse=True)[:5]
     mover_lines = [f"• {sym}: {price}" for _, sym, price in movers]
-    news = news_search("美股 收评 标普 纳指" if market == "US" else "港股 收评 恒生指数", 3)
+    if market == "US":
+        news_query = "美股 收评 标普 纳指"
+    elif traded_codes == {"CN"}:
+        news_query = "A股 收评 上证 深成 创业板"
+    else:
+        news_query = "港股 A股 收评 恒生指数 上证 深成"
+    news = news_search(news_query, 3)
     
     # P2: 市场全景 — 指数 + 主题分类
-    index_section = [f"• {display_symbol(s, quotes.get(s))}: {fmt_price(quotes.get(s))}" for s in cfg["index_symbols"] if s in quotes]
+    index_section = [f"• {display_symbol(s, quotes.get(s))}: {fmt_price(quotes.get(s))}" for s in active_index_symbols if s in quotes]
     thesis_syms = thesis_symbols(market)
+    thesis_syms = [s for s in thesis_syms if symbol_market_code(s) in traded_codes]
     thesis_movers = [(abs(pct(quotes.get(s))), display_symbol(s, quotes.get(s)), fmt_price(quotes.get(s))) for s in thesis_syms if s in quotes and pct(quotes.get(s)) is not None]
     thesis_movers = sorted(thesis_movers, reverse=True)[:5]
     thesis_lines = [f"• {sym}: {price}" for _, sym, price in thesis_movers]
+    scope = display_market_scope(cfg["cn"], traded_codes) if market == "HK" else cfg["cn"]
     
     lines = [
-        f"📋 {market_today(market)} {cfg['cn']}收盘复盘",
+        f"📋 {market_today(market)} {scope}收盘复盘",
         "",
         "## 📊 市场全景",
         "",
@@ -1263,7 +1366,7 @@ def main() -> int:
             print(close_review(ns.market))
         return 0
     except Exception as e:
-        print(f"⚠️ Investment System {ns.cmd} {ns.market} failed: {e}")
+        print(f"⚠️ NeoAlpha {ns.cmd} {ns.market} failed: {e}")
         return 1
 
 if __name__ == "__main__":
