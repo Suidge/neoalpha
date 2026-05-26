@@ -1,6 +1,6 @@
 # Architecture — NeoAlpha
 
-**Version**: 3.2.5 (2026-05-26)
+**Version**: 3.2.8 (2026-05-26)
 
 ## 核心理念
 

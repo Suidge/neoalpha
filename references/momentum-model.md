@@ -188,6 +188,8 @@ VM_Score = 0.5 × Z_Momentum + 0.5 × Z_Value
 5. 按 CMS 降序排列
 6. 输出筛选结果
 
+`screen_stocks.py` 在 SMAM 结果之上叠加日线技术因子层。该层使用 Longbridge 日线 OHLCV 本地计算趋势结构、B1 缩量回调、单针洗盘、MACD 相位和砖型动能确认。细节见 [technical-screener.md](technical-screener.md)。
+
 ### 6.3 筛选条件（默认）
 - CMS > +0.25（正动量）
 - Stability ≥ 0.6（信号一致）

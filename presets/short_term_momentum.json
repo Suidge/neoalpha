@@ -2,7 +2,7 @@
   "name": "short_term_momentum",
   "label": "短线动量选股器",
   "horizon": "1-4 weeks",
-  "description": "以 SMAM 动量为主，结合题材、板块热度、成交确认和短期催化剂，筛出适合盘中监控或试仓的候选。",
+  "description": "以 SMAM 动量为主，结合趋势结构、强势缩量回调、单针洗盘、MACD 相位、砖型动能、题材和短期催化剂，筛出适合盘中监控或试仓的候选。",
   "concept_keywords": [
     "AI",
     "人工智能",
@@ -21,9 +21,14 @@
     "重组"
   ],
   "components": [
-    {"name": "momentum", "weight": 45},
-    {"name": "concept_strength", "weight": 25},
-    {"name": "liquidity_volume", "weight": 15},
+    {"name": "momentum", "weight": 28},
+    {"name": "trend_regime", "weight": 16},
+    {"name": "pullback_setup", "weight": 16},
+    {"name": "single_needle_washout", "weight": 8},
+    {"name": "macd_phase_confirmation", "weight": 8},
+    {"name": "impulse_confirmation", "weight": 8},
+    {"name": "concept_strength", "weight": 10},
+    {"name": "liquidity_volume", "weight": 6},
     {"name": "catalyst", "weight": 10},
     {"name": "risk_penalty", "weight": -15}
   ],

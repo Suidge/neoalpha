@@ -2,13 +2,15 @@
   "name": "long_term_compounder",
   "label": "中长线复利选股器",
   "horizon": "1-4 quarters+",
-  "description": "以基本面质量、产业面、竞争格局和估值上涨空间为核心，筛出值得进入 thesis / DCF / 深度研究的候选。",
+  "description": "以基本面质量、产业面、竞争格局和估值上涨空间为核心，辅以长期趋势结构与筹码/回调质量，筛出值得进入 thesis / DCF / 深度研究的候选。",
   "components": [
-    {"name": "fundamental_quality", "weight": 30},
-    {"name": "industry_structure", "weight": 20},
-    {"name": "competitive_position", "weight": 20},
-    {"name": "valuation_upside", "weight": 20},
-    {"name": "catalyst", "weight": 10},
+    {"name": "fundamental_quality", "weight": 26},
+    {"name": "industry_structure", "weight": 17},
+    {"name": "competitive_position", "weight": 17},
+    {"name": "valuation_upside", "weight": 18},
+    {"name": "technical_regime", "weight": 12},
+    {"name": "accumulation_quality", "weight": 10},
+    {"name": "catalyst", "weight": 8},
     {"name": "risk_penalty", "weight": -20}
   ],
   "actions": [

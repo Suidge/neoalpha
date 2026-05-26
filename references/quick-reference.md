@@ -25,6 +25,7 @@ Use this table to route a user request to the smallest relevant reference or scr
 | Three-statement model | [3-statement-model.md](3-statement-model.md) |
 | Model update | [model-update.md](model-update.md) |
 | SMAM momentum | [momentum-model.md](momentum-model.md) or `scripts/screen_momentum.py --help` |
+| Daily technical screener layer / B1 / single needle / Vegas / MACD / brick-J | [technical-screener.md](technical-screener.md) |
 | Medium-term market health | [medium-term-market-health.md](medium-term-market-health.md) |
 | Model audit | [model-audit.md](model-audit.md) |
 | Unit economics | [unit-economics.md](unit-economics.md) |
