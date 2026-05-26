@@ -44,7 +44,7 @@ Common entry points:
 
 - Thesis files: `${INVESTMENT_THESIS_DIR:-~/Documents/neoalpha/thesis-tracker}`
   - US: `<SYMBOL>.US.md`, for example `TLN.US.md`
-  - HK/CN: `<CODE>.<MARKET>-<CompanyName>.md`, for example `0700.HK-Tencent.md`
+  - HK/SH/SZ: `<CODE>.<MARKET>-<CompanyName>.md`, for example `0700.HK-Tencent.md`
 - Daily strategies: `memory/strategies/{us,hk}-daily.md`
 - Portfolio ledger: `memory/strategies/portfolio/transactions.csv` as the source of truth
 - Generated portfolio snapshots: `memory/strategies/portfolio/positions-current.json` and `memory/strategies/positions-tracker.md`
