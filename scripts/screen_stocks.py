@@ -1303,16 +1303,23 @@ def main() -> None:
     rows = scan.get("results", [])
     if not args.no_technical:
         all_symbols = [row.get("symbol") for row in rows if row.get("symbol")]
+        
+        # Smart Cache Bypass Rule (v3.3.1): less than 10 symbols automatically forces fresh real-time data
+        cache_hours = args.technical_cache_hours
+        if len(all_symbols) < 10:
+            print(f"[INFO] 扫描标的数量 ({len(all_symbols)}) < 10，自动关闭日线缓存以拉取最新盘中实时数据 (technical_cache_hours forced to 0.0)")
+            cache_hours = 0.0
+
         benchmarks = fetch_benchmark_klines(
             all_symbols,
             bars=args.daily_bars,
-            cache_hours=args.technical_cache_hours,
+            cache_hours=cache_hours,
             delay=args.kline_delay,
         )
         technical = load_technical_map(
             all_symbols,
             bars=args.daily_bars,
-            cache_hours=args.technical_cache_hours,
+            cache_hours=cache_hours,
             delay=args.kline_delay,
             benchmarks=benchmarks,
         )

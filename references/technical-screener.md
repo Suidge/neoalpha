@@ -24,6 +24,13 @@ python3 skills/neoalpha/scripts/screen_stocks.py \
 
 Set `--technical-cache-hours 0` to force fresh K-line data. Use this when making intraday decisions during active market hours.
 
+### Smart Cache Bypass (v3.3.1)
+
+To maximize real-time accuracy during active trading sessions (e.g., verifying indicator shifts immediately after an intraday sell-off), a **Smart Cache Bypass** is enforced natively:
+* Whenever the active scan universe contains **fewer than 10 symbols**, the local cache is bypassed, forcing `technical-cache-hours` to `0.0`.
+* This ensures instant, fresh calculations using live intraday daily bars without manually passing parameters.
+* When scanning larger sets (>= 10 symbols), the user-defined cache remains active (defaulting to 6 hours) to safeguard API thresholds.
+
 Universe filters:
 
 ```bash

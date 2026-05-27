@@ -139,6 +139,13 @@ For live market or short-term judgment, refresh market data in the current sessi
 python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --market CN --preset short_term_momentum --top 20 --technical-cache-hours 0 --kline-delay 0 --json
 ```
 
+### Smart Cache Bypass (New in v3.3.1)
+
+To support active intraday decision-making (e.g., assessing a stock after a sudden drop), the screener implements a **Smart Cache Bypass**:
+* If the scan universe is **less than 10 symbols**, `technical-cache-hours` is **automatically forced to 0.0** (bypassing the default 6-hour cache).
+* This provides 100% fresh, real-time intraday K-line calculations for single stocks or tiny watchlists without requiring manual flags.
+* Larger pools (>= 10 symbols) still respect the `--technical-cache-hours` configuration to avoid exceeding Longbridge CLI rate limits.
+
 ## Agent Routing Rules
 
 1. If the user says "短线选股器", use `--preset short_term_momentum`.
