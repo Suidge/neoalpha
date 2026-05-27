@@ -50,7 +50,7 @@ Market filters:
 Default group file:
 
 ```text
-/Users/neoshi/Documents/neoalpha/symbol-groups.json
+~/Documents/neoalpha/symbol-groups.json
 ```
 
 Override it with `--group-file /path/to/groups.json`. The JSON must be an object whose values are either arrays or objects with a `symbols` array:
