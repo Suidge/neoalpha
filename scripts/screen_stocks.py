@@ -22,6 +22,9 @@ SKILL = ROOT / "skills" / "neoalpha"
 PRESETS_DIR = SKILL / "presets"
 DEFAULT_THESIS_DIR = Path.home() / "Documents" / "neoalpha" / "thesis-tracker"
 THESIS_DIR = Path(os.environ.get("INVESTMENT_THESIS_DIR", str(DEFAULT_THESIS_DIR))).expanduser()
+DEFAULT_GROUPS_FILE = Path(
+    os.environ.get("NEOALPHA_SYMBOL_GROUPS_FILE", str(DEFAULT_THESIS_DIR.parent / "symbol-groups.json"))
+).expanduser()
 MOMENTUM_SCANNER = SKILL / "scripts" / "screen_momentum.py"
 TZ = timezone(timedelta(hours=8))
 TECH_CACHE_DIR = Path(os.environ.get("NEOALPHA_TECH_CACHE_DIR", "~/.cache/neoalpha/kline")).expanduser()
@@ -162,6 +165,87 @@ def load_thesis_symbols(thesis_dir: Path = THESIS_DIR) -> list[str]:
         if symbol:
             symbols.append(symbol)
     return sorted(symbols)
+
+
+def normalize_symbol(symbol: str) -> str:
+    return symbol.strip().upper()
+
+
+def parse_symbol_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        parts = re.split(r"[\s,]+", value)
+    elif isinstance(value, list):
+        parts = value
+    else:
+        return []
+    return [normalize_symbol(str(part)) for part in parts if str(part).strip()]
+
+
+def load_symbol_groups(path: Path = DEFAULT_GROUPS_FILE) -> dict[str, list[str]]:
+    if not path.exists():
+        raise SystemExit(f"Symbol group file not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise SystemExit("Symbol group file must be a JSON object.")
+    groups: dict[str, list[str]] = {}
+    for name, value in data.items():
+        if isinstance(value, dict):
+            value = value.get("symbols")
+        symbols = parse_symbol_list(value)
+        if symbols:
+            groups[str(name)] = symbols
+    return groups
+
+
+def resolve_group_symbols(group_names: list[str] | None, group_file: str | None) -> list[str]:
+    if not group_names:
+        return []
+    groups = load_symbol_groups(Path(group_file).expanduser() if group_file else DEFAULT_GROUPS_FILE)
+    missing = [name for name in group_names if name not in groups]
+    if missing:
+        available = ", ".join(sorted(groups)) or "none"
+        raise SystemExit(f"Symbol group not found: {', '.join(missing)}. Available groups: {available}")
+    symbols: list[str] = []
+    seen: set[str] = set()
+    for name in group_names:
+        for symbol in groups[name]:
+            if symbol not in seen:
+                symbols.append(symbol)
+                seen.add(symbol)
+    return symbols
+
+
+def market_suffixes(market: str | None) -> tuple[str, ...]:
+    if not market:
+        return ()
+    normalized = market.upper()
+    if normalized in {"CN", "A"}:
+        return (".SH", ".SZ")
+    if normalized in {"SH", "SZ", "HK", "US"}:
+        return (f".{normalized}",)
+    raise SystemExit(f"Unsupported market: {market}")
+
+
+def filter_symbols_by_market(symbols: list[str], market: str | None) -> list[str]:
+    suffixes = market_suffixes(market)
+    if not suffixes:
+        return symbols
+    return [symbol for symbol in symbols if symbol.upper().endswith(suffixes)]
+
+
+def filter_symbols_by_group(symbols: list[str], group_symbols: list[str]) -> list[str]:
+    if not group_symbols:
+        return symbols
+    allowed = set(group_symbols)
+    return [symbol for symbol in symbols if normalize_symbol(symbol) in allowed]
+
+
+def filter_scan_rows(rows: list[dict[str, Any]], market: str | None, group_symbols: list[str]) -> list[dict[str, Any]]:
+    symbols = [normalize_symbol(str(row.get("symbol") or "")) for row in rows]
+    symbols = filter_symbols_by_market(symbols, market)
+    symbols = filter_symbols_by_group(symbols, group_symbols)
+    allowed = set(symbols)
+    return [row for row in rows if normalize_symbol(str(row.get("symbol") or "")) in allowed]
 
 
 def thesis_symbol_from_path(path: Path) -> str:
@@ -744,6 +828,7 @@ def main() -> None:
     group.add_argument("--symbols", help="逗号分隔标的列表，如 AAPL.US,MSFT.US,NVDA.US")
     group.add_argument("--from-thesis", action="store_true", help="扫描 thesis-tracker 中所有标的")
     group.add_argument("--thesis-dir", help="扫描指定 thesis 目录")
+    group.add_argument("--group", action="append", dest="groups", help="扫描命名标的分组；可重复使用，如 --group ai --group semiconductor")
     group.add_argument("--momentum-json", help="读取已生成的 screen_momentum JSON，便于复用或测试")
     parser.add_argument("--preset", default="short_term_momentum", help="preset 名称或 JSON 路径")
     parser.add_argument("--top", type=int, default=20, help="输出前 N 名")
@@ -752,19 +837,30 @@ def main() -> None:
     parser.add_argument("--technical-cache-hours", type=float, default=DEFAULT_TECH_CACHE_HOURS, help="日线 K 线缓存有效小时数，0 表示禁用缓存")
     parser.add_argument("--kline-delay", type=float, default=DEFAULT_KLINE_DELAY, help="逐标的拉取日线 K 线后的限速等待秒数")
     parser.add_argument("--no-technical", action="store_true", help="禁用日线技术因子，只使用原有动量/文本/估值评分")
+    parser.add_argument("--market", choices=["US", "HK", "CN", "A", "SH", "SZ"], help="按市场过滤标的；CN/A 表示 .SH 和 .SZ")
+    parser.add_argument("--group-filter", action="append", help="在当前 universe 上按命名分组取交集；可重复使用")
+    parser.add_argument("--group-file", help=f"命名标的分组 JSON 文件，默认 {DEFAULT_GROUPS_FILE}")
     parser.add_argument("--json", action="store_true", help="JSON 输出")
     args = parser.parse_args()
 
     preset = load_preset(args.preset)
     thesis_dir = Path(args.thesis_dir).expanduser() if args.thesis_dir else THESIS_DIR
+    group_names = list((args.groups or []) + (args.group_filter or []))
+    group_symbols = resolve_group_symbols(group_names, args.group_file)
 
     if args.momentum_json:
         scan = json.loads(Path(args.momentum_json).read_text(encoding="utf-8"))
+        scan["results"] = filter_scan_rows(scan.get("results", []), args.market, group_symbols)
     else:
         if args.symbols:
-            symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+            symbols = parse_symbol_list(args.symbols)
+        elif args.groups:
+            symbols = group_symbols
         else:
             symbols = load_thesis_symbols(thesis_dir)
+        symbols = filter_symbols_by_market(symbols, args.market)
+        if args.group_filter:
+            symbols = filter_symbols_by_group(symbols, group_symbols)
         if not symbols:
             raise SystemExit("No symbols to scan.")
         scan = run_momentum_scan(symbols)
@@ -791,6 +887,9 @@ def main() -> None:
         print(json.dumps({
             "scan_time": datetime.now(TZ).isoformat(),
             "preset": preset,
+            "market": args.market,
+            "groups": group_names or [],
+            "scanned_count": len(rows),
             "results": scored,
         }, ensure_ascii=False, indent=2))
     else:

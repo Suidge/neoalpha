@@ -24,6 +24,17 @@ python3 skills/neoalpha/scripts/screen_stocks.py \
 
 Set `--technical-cache-hours 0` to force fresh K-line data. Use this when making intraday decisions during active market hours.
 
+Universe filters:
+
+```bash
+python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --market CN --preset short_term_momentum
+python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --market HK --preset long_term_compounder
+python3 skills/neoalpha/scripts/screen_stocks.py --group ai_infra --preset short_term_momentum
+python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --group-filter cn_semis --preset long_term_compounder
+```
+
+`--market` supports `US/HK/CN/A/SH/SZ`. `--group` and `--group-filter` read named symbol groups from `~/Documents/neoalpha/symbol-groups.json` unless `--group-file` is provided.
+
 ## Imported Signal Families
 
 ### Trend Regime

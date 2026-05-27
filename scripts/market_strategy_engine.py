@@ -420,7 +420,9 @@ def run_stock_screen(symbols: List[str], preset: str, top: int = 10) -> Dict[str
     """Run preset stock screener on thesis symbols."""
     if not symbols or not STOCK_SCREENER.exists():
         return {"error": "stock screener unavailable", "results": []}
-    syms_arg = ",".join(symbols[:30])
+    screen_symbols = symbols[:30]
+    syms_arg = ",".join(screen_symbols)
+    timeout = min(300, max(120, len(screen_symbols) * 8))
     try:
         code, out, err = run(
             [
@@ -434,7 +436,7 @@ def run_stock_screen(symbols: List[str], preset: str, top: int = 10) -> Dict[str
                 str(top),
                 "--json",
             ],
-            timeout=60,
+            timeout=timeout,
         )
         if code != 0 or not out:
             return {"error": err or f"exit {code}", "results": []}
@@ -457,7 +459,7 @@ def run_stock_screen(symbols: List[str], preset: str, top: int = 10) -> Dict[str
             "label": preset_meta.get("label") or preset,
             "horizon": preset_meta.get("horizon"),
             "description": preset_meta.get("description"),
-            "scanned_symbols": symbols[:30],
+            "scanned_symbols": screen_symbols,
             "results": results,
         }
     except Exception as e:

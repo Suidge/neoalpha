@@ -1,8 +1,8 @@
 ---
 name: NeoAlpha
 slug: neoalpha
-version: 3.2.8
-description: Run quantamental stock research, thesis tracking, momentum scans, valuation workflows, portfolio ledger, and multi-market monitoring.
+version: 3.2.9
+description: Run quantamental stock research, thesis tracking, preset screeners, valuation workflows, portfolio ledgers, and multi-market monitoring across equities.
 ---
 
 # NeoAlpha
@@ -19,7 +19,7 @@ Use for stock research, investment thesis creation or updates, momentum screenin
 2. **Route before composing** — use the most specific reference or script for the requested workflow.
 3. **Use scenarios for valuation** — DCF, LBO, and earnings preview outputs need Bear / Base / Bull cases.
 4. **Keep the research discipline** — facts before inference, verification before judgment, risk before return, quantified payoff.
-5. **Run screeners for strategy work** — premarket strategy must incorporate short-term and long-term preset screener results.
+5. **Use preset screeners for batch evaluation** — for short-term or long-term stock selection, call `scripts/screen_stocks.py` with an explicit preset and universe.
 6. **Prioritize market state intraday** — `market_watch` is the live workflow's primary object; single-stock triggers are evidence.
 
 ## Quick Reference
@@ -30,6 +30,7 @@ Common entry points:
 - Thesis tracking: [references/thesis-tracker.md](references/thesis-tracker.md)
 - Initiating coverage: [references/initiating-coverage.md](references/initiating-coverage.md)
 - Momentum model: [references/momentum-model.md](references/momentum-model.md)
+- Preset screeners and batch universes: [references/screener-usage.md](references/screener-usage.md)
 - Portfolio monitoring: [references/portfolio-monitoring.md](references/portfolio-monitoring.md)
 - Architecture: [references/architecture.md](references/architecture.md)
 
