@@ -29,9 +29,11 @@ import re
 import subprocess
 import sys
 import os
+import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 
 # ── 信号权重（来自论文 + 实证调优） ──
@@ -72,11 +74,37 @@ def run_longbridge(args: list[str]) -> str:
         return ""
 
 
-def get_monthly_closes(symbol: str, months_back: int = 13) -> list[float]:
-    """
-    拉取月线收盘价序列，返回最近 N 个月的收盘价列表（从旧到新）。
-    """
-    # 计算起始日期（cover 13+ months）
+MOM_CACHE_DIR = Path("~/.cache/neoalpha/momentum").expanduser()
+
+
+def _check_cache(cache_file: Path, cache_hours: float = 12.0) -> Any | None:
+    if not cache_file.exists():
+        return None
+    try:
+        mtime = cache_file.stat().st_mtime
+        if time.time() - mtime > cache_hours * 3600:
+            return None
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _write_cache(cache_file: Path, data: Any) -> None:
+    try:
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def _get_monthly_kline_rows(symbol: str, months_back: int = 13) -> list[dict]:
+    cache_file = MOM_CACHE_DIR / "kline" / f"{symbol}.json"
+    cached = _check_cache(cache_file, cache_hours=12.0)
+    if cached is not None:
+        return cached
+
     end_date = datetime.now()
     start_date = end_date - timedelta(days=months_back * 31 + 15)
     start_str = start_date.strftime("%Y-%m-%d")
@@ -94,20 +122,37 @@ def get_monthly_closes(symbol: str, months_back: int = 13) -> list[float]:
 
     try:
         data = json.loads(output)
-        closes = []
-        for item in data:
-            if "close" in item:
-                closes.append(float(item["close"]))
-        return closes
+        if data:
+            _write_cache(cache_file, data)
+        # Sleep for rate limit safety
+        time.sleep(0.2)
+        return data
     except Exception as e:
         print(f"[WARN] Failed to parse JSON kline output for {symbol}: {e}", file=sys.stderr)
         return []
+
+
+def get_monthly_closes(symbol: str, months_back: int = 13) -> list[float]:
+    """
+    拉取月线收盘价序列，返回最近 N 个月的收盘价列表（从旧到新）。
+    """
+    rows = _get_monthly_kline_rows(symbol, months_back)
+    closes = []
+    for item in rows:
+        if "close" in item:
+            closes.append(float(item["close"]))
+    return closes
 
 
 def get_pe_rank(symbol: str) -> tuple[int, int]:
     """
     获取最新 PE 分位数据。返回 (pe_rank, total_count)。
     """
+    cache_file = MOM_CACHE_DIR / "valuation" / f"{symbol}.json"
+    cached = _check_cache(cache_file, cache_hours=12.0)
+    if cached is not None:
+        return tuple(cached)
+
     output = run_longbridge(["valuation-rank", symbol, "--format", "json"])
     if not output:
         return (0, 0)
@@ -117,7 +162,11 @@ def get_pe_rank(symbol: str) -> tuple[int, int]:
         pe_list = data.get("pe", [])
         if pe_list:
             last = pe_list[-1]
-            return (int(last.get("rank", 0)), int(last.get("total", 0)))
+            val = (int(last.get("rank", 0)), int(last.get("total", 0)))
+            _write_cache(cache_file, val)
+            # Sleep for rate limit safety
+            time.sleep(0.2)
+            return val
     except Exception as e:
         print(f"[WARN] Failed to parse JSON valuation-rank output for {symbol}: {e}", file=sys.stderr)
     return (0, 0)
@@ -154,27 +203,12 @@ def calc_momentum_signals(closes: list[float]) -> dict[str, float]:
 def calc_volume_ratio(symbol: str) -> float:
     """
     估算近 3 月 vs 近 12 月成交量比率。
-    拉取月线数据，计算近期 avg vol / 长期 avg vol。
+    从缓存的月线数据，计算近期 avg vol / 长期 avg vol。
     """
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=15 * 31)
-    start_str = start_date.strftime("%Y-%m-%d")
-    end_str = end_date.strftime("%Y-%m-%d")
-
-    output = run_longbridge([
-        "kline", "history", symbol,
-        "--start", start_str,
-        "--end", end_str,
-        "--period", "month",
-        "--format", "json"
-    ])
-    if not output:
-        return 1.0
-
+    rows = _get_monthly_kline_rows(symbol, 15)
     try:
-        data = json.loads(output)
         volumes = []
-        for item in data:
+        for item in rows:
             if "volume" in item:
                 vol_str = str(item["volume"]).replace(",", "")
                 volumes.append(float(vol_str))
@@ -186,7 +220,7 @@ def calc_volume_ratio(symbol: str) -> float:
             return 1.0
         return recent_3_avg / all_12_avg
     except Exception as e:
-        print(f"[WARN] Failed to parse JSON kline output for volume ratio of {symbol}: {e}", file=sys.stderr)
+        print(f"[WARN] Failed to calculate volume ratio for {symbol}: {e}", file=sys.stderr)
         return 1.0
 
 

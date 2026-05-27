@@ -1,22 +1,35 @@
 {
   "name": "long_term_compounder",
-  "label": "中长线复利选股器",
+  "label": "中长线复利选股器 v2",
+  "version": 2,
   "horizon": "1-4 quarters+",
-  "description": "以基本面质量、产业面、竞争格局和估值上涨空间为核心，辅以长期趋势结构与筹码/回调质量，筛出值得进入 thesis / DCF / 深度研究的候选。",
-  "components": [
-    {"name": "fundamental_quality", "weight": 26},
-    {"name": "industry_structure", "weight": 17},
-    {"name": "competitive_position", "weight": 17},
-    {"name": "valuation_upside", "weight": 18},
-    {"name": "technical_regime", "weight": 12},
-    {"name": "accumulation_quality", "weight": 10},
-    {"name": "catalyst", "weight": 8},
-    {"name": "risk_penalty", "weight": -20}
+  "description": "双层架构：基座分以基本面质量、产业面、竞争格局、估值空间和趋势模板为风控底座，亮点信号以VCP形态、波段位置、筹码结构、相对强度等捕捉中长线入场时机。",
+  "foundation": {
+    "min_score": 40,
+    "components": [
+      {"name": "fundamental_quality", "weight": 25},
+      {"name": "industry_structure", "weight": 15},
+      {"name": "competitive_position", "weight": 15},
+      {"name": "valuation_upside", "weight": 18},
+      {"name": "trend_template", "weight": 12},
+      {"name": "catalyst", "weight": 8},
+      {"name": "risk_penalty", "weight": -22}
+    ]
+  },
+  "highlights": [
+    {"name": "vcp_pattern", "threshold": 50, "label": "📐 VCP收缩突破"},
+    {"name": "pullback_setup", "threshold": 45, "label": "🔄 强势回调"},
+    {"name": "wave_position", "threshold": 70, "label": "🌊 Stage 2 上涨阶段"},
+    {"name": "accumulation_quality", "threshold": 55, "label": "🏦 筹码质量"},
+    {"name": "bollinger_squeeze", "threshold": 50, "label": "💎 布林收缩"},
+    {"name": "volume_price_divergence", "threshold": 55, "label": "📉 量价背离"},
+    {"name": "relative_strength", "threshold": 65, "label": "💪 相对强度领先"}
   ],
   "actions": [
-    {"min_score": 76, "label": "Thesis Candidate", "next_step": "进入 thesis-tracker 深度更新，并明确反证条件"},
-    {"min_score": 66, "label": "DCF Candidate", "next_step": "补充估值模型或可比公司分析"},
-    {"min_score": 52, "label": "Watchlist Only", "next_step": "逻辑有线索，但等待价格、数据或催化剂验证"},
-    {"min_score": 0, "label": "Reject", "next_step": "暂不进入中长线跟踪"}
+    {"condition": "foundation>=65 && highlights>=2", "label": "Thesis Candidate", "next_step": "进入 thesis-tracker 深度更新，并明确反证条件"},
+    {"condition": "foundation>=55 && highlights>=1", "label": "DCF Candidate", "next_step": "补充估值模型或可比公司分析"},
+    {"condition": "foundation>=40 && highlights>=1", "label": "Watch + Timing", "next_step": "逻辑有线索且有择时信号，浅度跟踪"},
+    {"condition": "foundation>=40", "label": "Watchlist Only", "next_step": "逻辑有线索，等待价格、数据或催化剂验证"},
+    {"condition": "default", "label": "Reject", "next_step": "暂不进入中长线跟踪"}
   ]
 }

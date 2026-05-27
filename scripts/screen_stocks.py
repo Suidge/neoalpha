@@ -30,6 +30,12 @@ TZ = timezone(timedelta(hours=8))
 TECH_CACHE_DIR = Path(os.environ.get("NEOALPHA_TECH_CACHE_DIR", "~/.cache/neoalpha/kline")).expanduser()
 DEFAULT_TECH_CACHE_HOURS = float(os.environ.get("NEOALPHA_TECH_CACHE_HOURS", "6"))
 DEFAULT_KLINE_DELAY = float(os.environ.get("NEOALPHA_KLINE_DELAY", "0.2"))
+BENCHMARK_SYMBOLS = {
+    ".US": "SPY.US",
+    ".HK": "2800.HK",
+    ".SH": "000300.SH",
+    ".SZ": "000300.SH",
+}
 DEFAULT_DAILY_BARS = int(os.environ.get("NEOALPHA_DAILY_BARS", "380"))
 
 CATALYST_KEYWORDS = [
@@ -300,6 +306,43 @@ def run_momentum_scan(symbols: list[str]) -> dict[str, Any]:
     except Exception as e:
         print(f"[WARN] Momentum scan failed: {e}, falling back to empty scan", file=sys.stderr)
         return {"results": []}
+
+
+def _detect_market_suffix(symbol: str) -> str:
+    for suffix in (".US", ".HK", ".SH", ".SZ"):
+        if symbol.upper().endswith(suffix):
+            return suffix
+    return ".US"
+
+
+def fetch_benchmark_klines(
+    symbols: list[str],
+    bars: int = DEFAULT_DAILY_BARS,
+    cache_hours: float = DEFAULT_TECH_CACHE_HOURS,
+    delay: float = DEFAULT_KLINE_DELAY,
+) -> dict[str, list[float]]:
+    """Fetch benchmark index klines for relative strength calculation.
+
+    Returns a dict mapping market suffix to a list of benchmark close prices.
+    Only fetches benchmarks for markets that appear in the symbol list.
+    """
+    needed_suffixes: set[str] = set()
+    for symbol in symbols:
+        needed_suffixes.add(_detect_market_suffix(symbol))
+    benchmarks: dict[str, list[float]] = {}
+    for suffix in needed_suffixes:
+        bench_symbol = BENCHMARK_SYMBOLS.get(suffix)
+        if not bench_symbol:
+            continue
+        if bench_symbol in benchmarks:
+            continue
+        rows = fetch_daily_klines(bench_symbol, bars=bars, cache_hours=cache_hours, delay=delay)
+        if rows:
+            benchmarks[suffix] = [_to_float(r["close"]) for r in rows]
+    # Map .SZ to same as .SH if not separately fetched
+    if ".SH" in benchmarks and ".SZ" not in benchmarks:
+        benchmarks[".SZ"] = benchmarks[".SH"]
+    return benchmarks
 
 
 def parse_pe_rank(pe_rank: str | None) -> tuple[int, int]:
@@ -579,7 +622,7 @@ def _technical_inputs(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def technical_factors(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] | None = None) -> dict[str, Any]:
     if len(rows) < 120:
         return {"available": False, "reason": f"insufficient daily bars: {len(rows)}"}
     data = _technical_inputs(rows)
@@ -616,7 +659,7 @@ def technical_factors(rows: list[dict[str, Any]]) -> dict[str, Any]:
     low_white_dist = abs(low - white_now) / white_now * 100 if white_now else 100
     bbi_dist = abs(close - bbi_now) / close * 100 if bbi_now and close else 100
     low_bbi_dist = abs(low - bbi_now) / bbi_now * 100 if bbi_now else 100
-    yellow_dist = abs(close - yellow_now) / yellow_now * 100 if yellow_now else 100
+    yellow_dist = abs(close - yellow_now) / yellow_now * 100 if yellow_now and close else 100
     pullback_white = (
         (white_now and close >= white_now and white_dist <= 2)
         or (white_now and close < white_now and white_dist < 0.8)
@@ -674,6 +717,305 @@ def technical_factors(rows: list[dict[str, Any]]) -> dict[str, Any]:
         + (10 if _every_rising(bbi, 20) else 0)
         + (10 if far_range >= 30 else 0)
     )
+
+    # --- NEW v2 TECHNICAL SCORES ---
+
+    # VCP: Volatility Contraction Pattern detection
+    lookback_vcp = min(120, len(c) - 5)
+    swing_highs_vcp: list[tuple[int, float]] = []
+    swing_lows_vcp: list[tuple[int, float]] = []
+    for i in range(len(c) - lookback_vcp, len(c) - 2):
+        if i < 3:
+            continue
+        if h[i] > h[i - 1] and h[i] > h[i - 2] and h[i] >= h[i + 1] and h[i] >= h[i + 2]:
+            swing_highs_vcp.append((i, h[i]))
+        if l[i] < l[i - 1] and l[i] < l[i - 2] and l[i] <= l[i + 1] and l[i] <= l[i + 2]:
+            swing_lows_vcp.append((i, l[i]))
+    drawdowns_vcp: list[float] = []
+    vol_at_trough_vcp: list[float] = []
+    for sh_pos, sh_price in swing_highs_vcp:
+        next_low = None
+        for sl_pos, sl_price in swing_lows_vcp:
+            if sl_pos > sh_pos:
+                next_low = (sl_pos, sl_price)
+                break
+        if next_low:
+            dd_pct = (sh_price - next_low[1]) / sh_price * 100 if sh_price else 0
+            avg_vol_vcp = sum(v[max(0, next_low[0] - 2) : next_low[0] + 1]) / min(3, next_low[0] + 1) if v else volume
+            drawdowns_vcp.append(dd_pct)
+            vol_at_trough_vcp.append(avg_vol_vcp)
+    vcp_contracting = False
+    vcp_vol_drying = False
+    vcp_higher_lows = False
+    vcp_near_pivot = False
+    if len(drawdowns_vcp) >= 3:
+        last3dd = drawdowns_vcp[-3:]
+        vcp_contracting = all(last3dd[i] > last3dd[i + 1] * 0.65 for i in range(len(last3dd) - 1)) and last3dd[-1] < last3dd[0] * 0.7
+        if len(vol_at_trough_vcp) >= 3:
+            last3v = vol_at_trough_vcp[-3:]
+            vcp_vol_drying = last3v[-1] < last3v[0] * 0.7
+        if len(swing_lows_vcp) >= 3:
+            last3l = [sl[1] for sl in swing_lows_vcp[-3:]]
+            vcp_higher_lows = all(last3l[i] < last3l[i + 1] for i in range(len(last3l) - 1))
+    if swing_highs_vcp:
+        recent_pivot = max(sh[1] for sh in swing_highs_vcp[-3:])
+        vcp_near_pivot = close >= recent_pivot * 0.95
+    vcp_score = clamp(
+        (35 if vcp_contracting else 0)
+        + (20 if vcp_vol_drying else 0)
+        + (15 if vcp_higher_lows else 0)
+        + (20 if vcp_near_pivot else 0)
+        + (10 if trend_ok else 0)
+    )
+
+    # Candlestick Reversal Patterns
+    body_size = abs(close - open_)
+    upper_shadow_cs = high - max(close, open_)
+    lower_shadow_cs = min(close, open_) - low
+    total_range_cs = high - low if high > low else 0.001
+    is_hammer = (
+        lower_shadow_cs >= body_size * 2
+        and upper_shadow_cs <= body_size * 0.3
+        and total_range_cs > 0
+        and close > open_
+        and len(c) > 3
+        and c[-2] < c[-3]
+    )
+    prev_body = abs(c[-2] - o[-2]) if len(c) > 2 else 0
+    is_bullish_engulfing = (
+        len(c) > 4
+        and close > open_
+        and c[-2] < o[-2]
+        and open_ <= c[-2]
+        and close >= o[-2]
+        and body_size > prev_body
+        and c[-3] < c[-4]
+    )
+    is_morning_star = False
+    if len(c) >= 4:
+        day1_bearish = c[-3] < o[-3] and abs(c[-3] - o[-3]) / max(o[-3], 0.01) > 0.01
+        day2_small = abs(c[-2] - o[-2]) / max(c[-2], 0.01) < 0.005
+        day3_bullish = close > open_ and close > (c[-3] + o[-3]) / 2
+        is_morning_star = day1_bearish and day2_small and day3_bullish
+    is_doji_confirm = (
+        len(c) > 2
+        and abs(c[-2] - o[-2]) / max(c[-2], 0.01) < 0.003
+        and close > open_
+        and close > c[-2]
+    )
+    is_piercing = (
+        len(c) > 2
+        and c[-2] < o[-2]
+        and open_ < c[-2]
+        and close > open_
+        and close > (c[-2] + o[-2]) / 2
+        and close < o[-2]
+    )
+    at_support = white_dist <= 3 or yellow_dist <= 4 or bbi_dist <= 3
+    vol_ma5 = sum(v[-5:]) / 5 if len(v) >= 5 else volume
+    vol_confirm_cs = volume > vol_ma5 * 1.2
+    pattern_scores_cs: list[float] = []
+    if is_morning_star:
+        pattern_scores_cs.append(45)
+    if is_hammer and at_support:
+        pattern_scores_cs.append(40)
+    elif is_hammer:
+        pattern_scores_cs.append(25)
+    if is_bullish_engulfing:
+        pattern_scores_cs.append(35)
+    if is_doji_confirm:
+        pattern_scores_cs.append(30)
+    if is_piercing:
+        pattern_scores_cs.append(25)
+    best_pattern = max(pattern_scores_cs) if pattern_scores_cs else 0
+    candlestick_score = clamp(
+        best_pattern
+        + (15 if vol_confirm_cs and best_pattern > 0 else 0)
+        + (10 if at_support and best_pattern > 0 else 0)
+        + (10 if trend_ok and best_pattern > 0 else 0)
+    )
+
+    # Chan Theory Divergence (simplified: MACD area comparison)
+    macd_hist = data["macd"]
+    zero_crosses: list[tuple[str, int]] = []
+    for i in range(1, len(macd_hist)):
+        if macd_hist[i - 1] <= 0 < macd_hist[i]:
+            zero_crosses.append(("up", i))
+        elif macd_hist[i - 1] >= 0 > macd_hist[i]:
+            zero_crosses.append(("down", i))
+    neg_areas: list[dict[str, Any]] = []
+    current_neg_start: int | None = None
+    for direction, pos in zero_crosses:
+        if direction == "down":
+            current_neg_start = pos
+        elif direction == "up" and current_neg_start is not None:
+            area = sum(abs(macd_hist[jj]) for jj in range(current_neg_start, min(pos, len(macd_hist))))
+            price_low = min(l[current_neg_start : min(pos, len(l))])
+            neg_areas.append({"start": current_neg_start, "end": pos, "area": area, "price_low": price_low})
+            current_neg_start = None
+    if current_neg_start is not None and current_neg_start < len(macd_hist) - 1:
+        area = sum(abs(macd_hist[jj]) for jj in range(current_neg_start, len(macd_hist)))
+        price_low = min(l[current_neg_start : len(l)])
+        neg_areas.append({"start": current_neg_start, "end": len(macd_hist) - 1, "area": area, "price_low": price_low})
+    bottom_divergence = False
+    if len(neg_areas) >= 2:
+        prev_neg = neg_areas[-2]
+        curr_neg = neg_areas[-1]
+        if curr_neg["price_low"] <= prev_neg["price_low"] * 1.02 and curr_neg["area"] < prev_neg["area"] * 0.85:
+            bottom_divergence = True
+    chan_second_buy = False
+    up_crosses = [(d, p) for d, p in zero_crosses if d == "up"]
+    if up_crosses and up_crosses[-1][1] > len(c) - 15:
+        if data["dif"][-1] > data["dea"][-1] or data["dif"][-1] > data["dif"][-3]:
+            chan_second_buy = True
+    macd_area_shrinking = len(neg_areas) >= 2 and neg_areas[-1]["area"] < neg_areas[-2]["area"]
+    chan_vol_shrink = False
+    if neg_areas:
+        na = neg_areas[-1]
+        na_vols = v[na["start"] : min(na["end"] + 1, len(v))]
+        if na_vols and len(v) > 40:
+            chan_vol_shrink = sum(na_vols) / max(len(na_vols), 1) < sum(v[-40:-20]) / max(20, 1) * 0.6
+    chan_score = clamp(
+        (45 if bottom_divergence else 0)
+        + (35 if chan_second_buy else 0)
+        + (25 if macd_area_shrinking and not bottom_divergence else 0)
+        + (15 if trend_ok else 0)
+        + (10 if chan_vol_shrink else 0)
+    )
+
+    # Bollinger Squeeze (TTM Squeeze)
+    ma20_list = _ma(c, 20)
+    boll_squeeze_val = 0.0
+    if ma20_list[-1] is not None and ma20_list[-1] > 0:
+        bb_stds: list[float] = []
+        for bi in range(max(20, len(c) - 120), len(c)):
+            if ma20_list[bi] is not None:
+                variance = sum((c[bj] - ma20_list[bj]) ** 2 for bj in range(max(0, bi - 19), bi + 1) if ma20_list[bj] is not None) / 20
+                bb_stds.append(variance ** 0.5)
+        current_std = bb_stds[-1] if bb_stds else 0
+        bb_upper_val = ma20_list[-1] + 2 * current_std
+        bb_lower_val = ma20_list[-1] - 2 * current_std
+        bb_width = (bb_upper_val - bb_lower_val) / ma20_list[-1] * 100
+        bb_widths = [(2 * s * 2) / ma20_list[-1] * 100 for s in bb_stds] if bb_stds else [bb_width]
+        bb_width_rank = sum(1 for bw in bb_widths if bw <= bb_width) / max(len(bb_widths), 1) * 100
+        tr_list: list[float] = []
+        for ti in range(1, len(c)):
+            tr_list.append(max(h[ti] - l[ti], abs(h[ti] - c[ti - 1]), abs(l[ti] - c[ti - 1])))
+        atr14 = sum(tr_list[-14:]) / 14 if len(tr_list) >= 14 else (sum(tr_list) / max(len(tr_list), 1))
+        ema20_val = _ema(c, 20)[-1]
+        kc_upper_val = ema20_val + 1.5 * atr14
+        kc_lower_val = ema20_val - 1.5 * atr14
+        squeeze_on = bb_upper_val < kc_upper_val and bb_lower_val > kc_lower_val
+        price_above_mid = close > ma20_list[-1]
+        mom_direction = close > c[-13] if len(c) > 13 else False
+        boll_squeeze_val = clamp(
+            (35 if bb_width_rank <= 20 else (15 if bb_width_rank <= 35 else 0))
+            + (25 if squeeze_on else 0)
+            + (15 if price_above_mid else 0)
+            + (15 if mom_direction else 0)
+            + (10 if trend_ok else 0)
+        )
+
+    # Volume-Price Divergence
+    obv: list[float] = [0.0]
+    for vi in range(1, len(c)):
+        if c[vi] > c[vi - 1]:
+            obv.append(obv[-1] + v[vi])
+        elif c[vi] < c[vi - 1]:
+            obv.append(obv[-1] - v[vi])
+        else:
+            obv.append(obv[-1])
+    price_declining_20 = c[-1] < c[-21] if len(c) > 21 else False
+    obv_not_declining = obv[-1] >= obv[-21] if len(obv) > 21 else False
+    obv_divergence = price_declining_20 and obv_not_declining
+    selling_exhaust = False
+    if len(c) > 10:
+        down_vols = [v[di] for di in range(len(c) - 10, len(c)) if c[di] < c[di - 1]]
+        if len(down_vols) >= 3:
+            selling_exhaust = down_vols[-1] < down_vols[0] * 0.7
+    healthy_vol = False
+    if len(c) > 20:
+        up_vol = sum(v[ui] for ui in range(len(c) - 20, len(c)) if c[ui] > c[ui - 1])
+        down_vol = sum(v[ui] for ui in range(len(c) - 20, len(c)) if c[ui] < c[ui - 1])
+        healthy_vol = up_vol > down_vol * 1.3 if down_vol > 0 else up_vol > 0
+    ad_line: list[float] = [0.0]
+    for ai in range(1, len(c)):
+        clv = ((c[ai] - l[ai]) - (h[ai] - c[ai])) / (h[ai] - l[ai]) if h[ai] != l[ai] else 0
+        ad_line.append(ad_line[-1] + clv * v[ai])
+    ad_rising = len(ad_line) > 20 and ad_line[-1] > ad_line[-21]
+    vol_price_div_score = clamp(
+        (35 if obv_divergence else 0)
+        + (25 if selling_exhaust else 0)
+        + (20 if healthy_vol else 0)
+        + (10 if ad_rising else 0)
+        + (10 if trend_ok else 0)
+    )
+
+    # Trend Template (Minervini 8 conditions)
+    ma50_list = _ma(c, 50)
+    ma150_list = _ma(c, 150)
+    ma200_list = _ma(c, 200)
+    ma50_now = _latest(ma50_list)
+    ma150_now = _latest(ma150_list)
+    ma200_now = _latest(ma200_list)
+    ma200_1mo = _latest(ma200_list, 20)
+    tt_conditions = 0
+    if ma150_now and ma200_now:
+        if close > ma150_now and close > ma200_now:
+            tt_conditions += 1
+        if ma150_now > ma200_now:
+            tt_conditions += 1
+    if ma200_now and ma200_1mo and ma200_now > ma200_1mo:
+        tt_conditions += 1
+    if ma50_now and ma150_now and ma200_now:
+        if ma50_now > ma150_now and ma50_now > ma200_now:
+            tt_conditions += 1
+    if ma50_now and close > ma50_now:
+        tt_conditions += 1
+    lookback_52w = min(252, len(c))
+    year_high = _hhv(h, lookback_52w)
+    year_low = _llv(l, lookback_52w)
+    if year_low > 0 and (close / year_low - 1) >= 0.30:
+        tt_conditions += 1
+    if year_high > 0 and (year_high / close - 1) <= 0.25:
+        tt_conditions += 1
+    if len(c) > 126 and c[-1] > c[-126]:
+        tt_conditions += 1
+    trend_template_val = clamp(tt_conditions / 8 * 100)
+
+    # Wave Position / Stage Analysis
+    wave_val = 50.0
+    if ma200_now and ma200_1mo and ma200_now > 0:
+        ma200_slope = (ma200_now - ma200_1mo) / ma200_1mo * 100
+        if ma200_slope > 0.5 and close > ma200_now and ma150_now and ma150_now > ma200_now:
+            wave_val = 85.0
+            if ma50_now and ma50_now > ma150_now:
+                wave_val = 95.0
+        elif abs(ma200_slope) <= 0.5 and abs(close - ma200_now) / ma200_now < 0.05:
+            wave_val = 30.0
+        elif ma200_slope > 0 and close < ma200_now:
+            wave_val = 45.0
+        elif ma200_slope < -0.5:
+            wave_val = 5.0 if close < ma200_now else 20.0
+        else:
+            wave_val = 40.0
+
+    # Relative Strength vs Benchmark
+    rs_val = 50.0
+    if benchmark_closes and len(benchmark_closes) > 252 and len(c) > 252:
+        def _period_rs(stock: list[float], bench: list[float], period: int) -> float:
+            if len(stock) > period and len(bench) > period:
+                stock_ret = stock[-1] / stock[-period - 1] - 1 if stock[-period - 1] else 0
+                bench_ret = bench[-1] / bench[-period - 1] - 1 if bench[-period - 1] else 0
+                return stock_ret - bench_ret
+            return 0.0
+        rs_63 = _period_rs(c, benchmark_closes, 63)
+        rs_126 = _period_rs(c, benchmark_closes, 126)
+        rs_189 = _period_rs(c, benchmark_closes, 189)
+        rs_252 = _period_rs(c, benchmark_closes, 252)
+        composite_rs = 0.4 * rs_63 + 0.2 * rs_126 + 0.2 * rs_189 + 0.2 * rs_252
+        rs_val = clamp((composite_rs + 0.3) / 0.6 * 100)
+
     return {
         "available": True,
         "close": round(close, 4),
@@ -684,6 +1026,14 @@ def technical_factors(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "impulse_confirmation": round(impulse_score, 1),
         "technical_regime": round(trend_score, 1),
         "accumulation_quality": round(accumulation_score, 1),
+        "vcp_pattern": round(vcp_score, 1),
+        "candlestick_reversal": round(candlestick_score, 1),
+        "chan_divergence": round(chan_score, 1),
+        "bollinger_squeeze": round(boll_squeeze_val, 1),
+        "volume_price_divergence": round(vol_price_div_score, 1),
+        "trend_template": round(trend_template_val, 1),
+        "wave_position": round(wave_val, 1),
+        "relative_strength": round(rs_val, 1),
         "signals": {
             "trend_ok": trend_ok,
             "strong_trend": strong_trend,
@@ -704,6 +1054,15 @@ def technical_factors(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "rsi3": round(rsi3[-1], 2),
             "short": round(short[-1], 2),
             "long": round(long[-1], 2),
+            "vcp_contracting": vcp_contracting,
+            "vcp_near_pivot": vcp_near_pivot,
+            "candlestick_pattern": best_pattern > 0,
+            "bottom_divergence": bottom_divergence,
+            "squeeze_on": squeeze_on if ma20_list[-1] is not None else False,
+            "obv_divergence": obv_divergence,
+            "trend_template_conditions": tt_conditions,
+            "wave_stage": wave_val,
+            "rs_score": round(rs_val, 1),
         },
     }
 
@@ -713,11 +1072,16 @@ def load_technical_map(
     bars: int = DEFAULT_DAILY_BARS,
     cache_hours: float = DEFAULT_TECH_CACHE_HOURS,
     delay: float = DEFAULT_KLINE_DELAY,
+    benchmarks: dict[str, list[float]] | None = None,
 ) -> dict[str, dict[str, Any]]:
     tech = {}
     for symbol in symbols:
         rows = fetch_daily_klines(symbol, bars=bars, cache_hours=cache_hours, delay=delay)
-        tech[symbol] = technical_factors(rows)
+        bench = None
+        if benchmarks:
+            suffix = _detect_market_suffix(symbol)
+            bench = benchmarks.get(suffix)
+        tech[symbol] = technical_factors(rows, benchmark_closes=bench)
     return tech
 
 
@@ -749,6 +1113,14 @@ def component_score(name: str, row: dict[str, Any], text: str, preset: dict[str,
         "impulse_confirmation",
         "technical_regime",
         "accumulation_quality",
+        "vcp_pattern",
+        "candlestick_reversal",
+        "chan_divergence",
+        "bollinger_squeeze",
+        "volume_price_divergence",
+        "trend_template",
+        "wave_position",
+        "relative_strength",
     }:
         technical = row.get("technical") or {}
         return float(technical.get(name) or 0)
@@ -758,28 +1130,56 @@ def component_score(name: str, row: dict[str, Any], text: str, preset: dict[str,
 def score_row(row: dict[str, Any], preset: dict[str, Any], thesis_dir: Path) -> dict[str, Any]:
     symbol = row.get("symbol") or ""
     text = thesis_text(symbol, thesis_dir)
-    components = []
+
+    foundation_cfg = preset.get("foundation", {})
+    foundation_components = foundation_cfg.get("components", preset.get("components", []))
+    
+    # Calculate foundation score
     positive_weight = 0.0
     weighted = 0.0
     penalty = 0.0
+    comp_details: list[dict[str, Any]] = []
 
-    for component in preset.get("components", []):
+    for component in foundation_components:
         name = component["name"]
         weight = float(component["weight"])
         raw = component_score(name, row, text, preset)
-        components.append({"name": name, "weight": weight, "score": round(raw, 1)})
+        comp_details.append({"name": name, "weight": weight, "score": round(raw, 1)})
         if weight >= 0:
             positive_weight += weight
             weighted += raw * weight
         else:
             penalty += raw * abs(weight) / 100
 
-    base_score = weighted / positive_weight if positive_weight else 0.0
-    final_score = clamp(base_score - penalty)
-    action = action_for_score(final_score, preset)
+    foundation_score = clamp((weighted / positive_weight if positive_weight else 0.0) - penalty)
+
+    # Evaluate highlight signals
+    highlights_cfg = preset.get("highlights", [])
+    triggered_highlights: list[dict[str, Any]] = []
+    all_highlight_details: list[dict[str, Any]] = []
+
+    for hl in highlights_cfg:
+        hl_name = hl["name"]
+        threshold = float(hl.get("threshold", 50))
+        hl_label = hl.get("label", hl_name)
+        raw = component_score(hl_name, row, text, preset)
+        detail = {"name": hl_name, "label": hl_label, "score": round(raw, 1), "threshold": threshold, "triggered": raw >= threshold}
+        all_highlight_details.append(detail)
+        if raw >= threshold:
+            triggered_highlights.append({"name": hl_name, "label": hl_label, "confidence": round(raw, 1)})
+
+    # Match action
+    action = _match_v2_action(foundation_score, len(triggered_highlights), preset)
+
+    # Composite score for sorting: foundation + highlight bonus
+    composite = foundation_score + sum(h["confidence"] * 0.15 for h in triggered_highlights)
+
     return {
         "symbol": symbol,
-        "score": round(final_score, 1),
+        "score": round(composite, 1),
+        "foundation_score": round(foundation_score, 1),
+        "highlights_count": len(triggered_highlights),
+        "highlights": triggered_highlights,
         "action": action["label"],
         "next_step": action["next_step"],
         "cms": row.get("cms"),
@@ -788,36 +1188,71 @@ def score_row(row: dict[str, Any], preset: dict[str, Any], thesis_dir: Path) -> 
         "vam": row.get("vam"),
         "vm_score": row.get("vm_score"),
         "pe_rank": row.get("pe_rank"),
-        "components": components,
+        "foundation_components": comp_details,
+        "highlight_details": all_highlight_details,
         "technical": row.get("technical"),
         "has_thesis": bool(text),
     }
 
 
-def action_for_score(score: float, preset: dict[str, Any]) -> dict[str, str]:
-    actions = sorted(preset.get("actions", []), key=lambda x: x["min_score"], reverse=True)
-    for action in actions:
-        if score >= float(action["min_score"]):
+def _parse_condition(condition: str, foundation: float, highlights: int) -> bool:
+    """Parse simple condition expressions like 'foundation>=55 && highlights>=2'."""
+    if condition == "default":
+        return True
+    parts = [p.strip() for p in condition.split("&&")]
+    for part in parts:
+        for op in [">=", "<=", ">", "<", "=="]:
+            if op in part:
+                lhs, rhs = part.split(op, 1)
+                lhs = lhs.strip()
+                rhs_val = float(rhs.strip())
+                if lhs == "foundation":
+                    lhs_val = foundation
+                elif lhs == "highlights":
+                    lhs_val = float(highlights)
+                else:
+                    return False
+                if op == ">=" and not (lhs_val >= rhs_val):
+                    return False
+                if op == "<=" and not (lhs_val <= rhs_val):
+                    return False
+                if op == ">" and not (lhs_val > rhs_val):
+                    return False
+                if op == "<" and not (lhs_val < rhs_val):
+                    return False
+                if op == "==" and not (lhs_val == rhs_val):
+                    return False
+                break
+    return True
+
+
+def _match_v2_action(foundation: float, highlights_count: int, preset: dict[str, Any]) -> dict[str, str]:
+    """Match action based on v2 condition expressions."""
+    for action in preset.get("actions", []):
+        condition = action.get("condition", "default")
+        if _parse_condition(condition, foundation, highlights_count):
             return action
-    return {"label": "Unrated", "next_step": "No action"}
+    return {"label": "Unrated", "next_step": "No action", "condition": "default"}
 
 
 def render_table(results: list[dict[str, Any]], preset: dict[str, Any]) -> None:
     print(f"\n{preset.get('label', preset.get('name'))} — {preset.get('horizon', '')}")
+    print(f"架构: 基座+亮点 v2 | 基座合格线: {preset.get('foundation', {}).get('min_score', 'N/A')}")
     print(f"扫描时间: {datetime.now(TZ).strftime('%Y-%m-%d %H:%M:%S')} Asia/Shanghai")
     print(f"候选数量: {len(results)}\n")
-    header = f"{'Rank':<5} {'Symbol':<12} {'Score':>6} {'Action':<18} {'CMS':>7} {'Q':<3} {'VM':>7} {'Next Step'}"
+    header = f"{'Rank':<5} {'Symbol':<12} {'Base':>5} {'HL':>3} {'Score':>6} {'Action':<18} {'Highlights':<40} {'Next Step'}"
     print(header)
-    print("-" * len(header))
+    print("-" * max(len(header), 120))
     for idx, item in enumerate(results, 1):
-        vm = item.get("vm_score")
-        vm_text = f"{float(vm):+.3f}" if vm is not None else "N/A"
-        cms = item.get("cms")
-        cms_text = f"{float(cms):+.3f}" if cms is not None else "N/A"
+        hl_names = ", ".join(h["label"] for h in item.get("highlights", []))
+        if not hl_names:
+            hl_names = "—"
+        if len(hl_names) > 38:
+            hl_names = hl_names[:35] + "..."
         print(
-            f"{idx:<5} {item['symbol']:<12} {item['score']:>6.1f} "
-            f"{item['action']:<18} {cms_text:>7} {str(item.get('quintile') or ''):<3} "
-            f"{vm_text:>7} {item['next_step']}"
+            f"{idx:<5} {item['symbol']:<12} {item.get('foundation_score', 0):>5.1f} "
+            f"{item.get('highlights_count', 0):>3} {item['score']:>6.1f} "
+            f"{item['action']:<18} {hl_names:<40} {item['next_step']}"
         )
     print("\n以上为研究筛选结果，不构成投资建议或交易指令。")
 
@@ -867,11 +1302,19 @@ def main() -> None:
 
     rows = scan.get("results", [])
     if not args.no_technical:
-        technical = load_technical_map(
-            [row.get("symbol") for row in rows if row.get("symbol")],
+        all_symbols = [row.get("symbol") for row in rows if row.get("symbol")]
+        benchmarks = fetch_benchmark_klines(
+            all_symbols,
             bars=args.daily_bars,
             cache_hours=args.technical_cache_hours,
             delay=args.kline_delay,
+        )
+        technical = load_technical_map(
+            all_symbols,
+            bars=args.daily_bars,
+            cache_hours=args.technical_cache_hours,
+            delay=args.kline_delay,
+            benchmarks=benchmarks,
         )
         for row in rows:
             symbol = row.get("symbol")
@@ -890,6 +1333,7 @@ def main() -> None:
             "market": args.market,
             "groups": group_names or [],
             "scanned_count": len(rows),
+            "architecture": "v2_foundation_highlights",
             "results": scored,
         }, ensure_ascii=False, indent=2))
     else:

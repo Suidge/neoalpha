@@ -82,40 +82,200 @@ Inspired by `砖型图+J-日线附图.txt`. It combines a brick-style short mome
 
 Use it after a pullback setup appears. It is better for confirming renewed strength than for initial broad screening.
 
-## Preset Mapping
+### VCP (Volatility Contraction Pattern)
 
-`short_term_momentum` uses:
+Inspired by Minervini's SEPA strategy. It detects consecutive tightening pullback cycles with diminishing volume — the hallmark of supply exhaustion before a breakout.
 
-- `trend_regime`
-- `pullback_setup`
-- `single_needle_washout`
-- `macd_phase_confirmation`
-- `impulse_confirmation`
+- 3+ pullback cycles with decreasing drawdown depth.
+- Volume drying up at each successive trough.
+- Higher lows forming (demand stepping up).
+- Current price within 5% of the breakout pivot.
 
-`long_term_compounder` uses:
+Use it in Stage 2 uptrends. Best when combined with trend regime and relative strength.
 
-- `technical_regime`
-- `accumulation_quality`
+### Candlestick Reversal
 
-Long-term screening deliberately does not treat B1, single-needle, or brick signals as company-quality factors. They only help with price structure and entry timing.
+Classic Japanese candlestick patterns (Steve Nison). Detects bullish reversal formations near key support levels.
 
-## Score Interpretation
+Recognized patterns (by reliability):
 
-Short-term scores are calibrated for sparse technical setups, so `70+` is already a strong watch candidate:
+1. **Morning Star** (45 pts): 3-candle reversal with small middle body.
+2. **Hammer at Support** (40 pts): Long lower shadow ≥ 2x body, near white/yellow/BBI line.
+3. **Bullish Engulfing** (35 pts): Today's bullish body fully engulfs yesterday's bearish body.
+4. **Doji + Confirmation** (30 pts): Doji followed by bullish confirmation candle.
+5. **Piercing Line** (25 pts): Bullish candle penetrates >50% into prior bearish candle.
 
-- `70+`: priority watch.
-- `58-70`: setup watch.
-- `45-58`: theme or backup lead.
-- `<45`: avoid chasing.
+Bonus for volume confirmation (+15) and support proximity (+10).
 
-Long-term scores are calibrated for thesis-driven screening:
+### Chan Theory Divergence (缠论背驰)
 
-- `76+`: thesis candidate.
-- `66-76`: DCF or peer-comparison candidate.
-- `52-66`: watchlist only.
-- `<52`: reject / low priority.
+Simplified implementation of 缠中说禅 divergence detection using MACD histogram area comparison. Does not implement full pen/segment/hub (笔/段/中枢) analysis.
 
-For both presets, read the score with the ranking inside the scanned universe. A top-ranked stock in a narrow thesis pool can still be worth review even if the absolute score is below the strongest band.
+Detects:
+
+- **Bottom divergence**: Price makes new low but MACD negative area shrinks — trend force is exhausting.
+- **Second buy point (二买)**: After a golden cross, DIF remains above DEA or quickly recovers.
+- **MACD area shrinking**: Consecutive negative areas getting smaller — bearish momentum fading.
+
+Extremely effective in A-share markets. Use inside trend regime for best results.
+
+### Bollinger Squeeze (TTM Squeeze)
+
+John Bollinger's Bollinger Bands combined with Keltner Channel for volatility squeeze detection (TTM Squeeze indicator).
+
+- Bollinger Band width (BBW) in bottom 20 percentile of last 120 bars.
+- Squeeze ON: Bollinger Bands contract inside Keltner Channel — extreme compression.
+- Price direction above/below middle band.
+- Momentum turning positive.
+
+A squeeze fires before major moves. Direction is determined by price position relative to middle band.
+
+### Volume-Price Divergence
+
+Classic volume-price analysis (Granville OBV, Wyckoff theory).
+
+- **OBV Divergence**: Price declining but OBV flat/rising — accumulation under the surface.
+- **Selling Exhaustion**: Decreasing volume on down days — bears are running out of supply.
+- **Healthy Volume Pattern**: Up-day volume consistently exceeds down-day volume.
+- **A/D Line Rising**: Accumulation/Distribution line trending up.
+
+### Trend Template (Minervini 8 Conditions)
+
+Mark Minervini's Stage 2 trend template — 8 mandatory conditions for stock health:
+
+1. Price > MA150 and Price > MA200
+2. MA150 > MA200
+3. MA200 rising ≥ 1 month
+4. MA50 > MA150 and MA50 > MA200
+5. Price > MA50
+6. Price ≥ 52-week low + 30%
+7. Price within 25% of 52-week high
+8. RS positive (simplified: 6-month return > 0)
+
+Score = conditions_met / 8 × 100. Used in long-term preset foundation.
+
+### Wave Position (Stage Analysis)
+
+Simplified Elliott Wave / Minervini Stage Analysis based on MA200 slope and price position:
+
+- **Stage 1 (筑底)**: MA200 flat, price near MA200 → 30 pts
+- **Stage 2 (上涨)**: MA200 rising, bullish MA alignment → 85-95 pts
+- **Stage 3 (见顶)**: MA200 flattening, price below → 40-45 pts
+- **Stage 4 (下跌)**: MA200 declining → 5-20 pts
+
+### Relative Strength
+
+Stock performance vs benchmark index (SPY.US / 000300.SH / 2800.HK).
+
+Composite RS = 0.4 × RS_63d + 0.2 × RS_126d + 0.2 × RS_189d + 0.2 × RS_252d
+
+Mapped to 0-100. Requires benchmark kline data (1-3 extra API calls per run, cached).
+
+## Preset Mapping (v2 Architecture)
+
+Both presets now use a dual-layer architecture: **Foundation** (risk-control gate) + **Highlights** (opportunity detection).
+
+### Foundation Layer
+
+Foundation components are weighted-averaged to produce a base score (0-100). A stock must meet the minimum foundation score to enter highlight evaluation.
+
+`short_term_momentum` foundation (min 35):
+
+- `trend_regime` (weight 30) — primary risk filter
+- `momentum` (weight 25) — SMAM directional confirmation
+- `liquidity_volume` (weight 15) — tradability
+- `concept_strength` (weight 10) — theme relevance
+- `catalyst` (weight 10) — catalyst presence
+- `risk_penalty` (weight -20) — risk deduction
+
+`long_term_compounder` foundation (min 40):
+
+- `fundamental_quality` (weight 25) — thesis text quality signals
+- `industry_structure` (weight 15) — industry position signals
+- `competitive_position` (weight 15) — moat signals
+- `valuation_upside` (weight 18) — quantitative + text valuation
+- `trend_template` (weight 12) — Minervini 8-condition template
+- `catalyst` (weight 8) — catalyst presence
+- `risk_penalty` (weight -22) — risk deduction
+
+### Highlight Layer
+
+Highlight signals are evaluated independently. **Any single highlight firing is enough** to flag a stock for attention.
+
+`short_term_momentum` highlights:
+
+| Signal | Threshold | Source |
+|--------|-----------|--------|
+| 🎯 单针洗盘 | 60 | `single_needle_washout` |
+| 📈 MACD相位确认 | 55 | `macd_phase_confirmation` |
+| 🔥 砖型反转 | 60 | `impulse_confirmation` |
+| 🔄 强势回调 | 50 | `pullback_setup` |
+| 📐 VCP收缩突破 | 55 | `vcp_pattern` |
+| 🕯️ K线反转形态 | 60 | `candlestick_reversal` |
+| 📊 缠论背驰 | 55 | `chan_divergence` |
+| 💎 布林收缩 | 55 | `bollinger_squeeze` |
+| 📉 量价背离 | 60 | `volume_price_divergence` |
+
+`long_term_compounder` highlights:
+
+| Signal | Threshold | Source |
+|--------|-----------|--------|
+| 📐 VCP收缩突破 | 50 | `vcp_pattern` |
+| 🔄 强势回调 | 45 | `pullback_setup` |
+| 🌊 Stage 2 上涨阶段 | 70 | `wave_position` |
+| 🏦 筹码质量 | 55 | `accumulation_quality` |
+| 💎 布林收缩 | 50 | `bollinger_squeeze` |
+| 📉 量价背离 | 55 | `volume_price_divergence` |
+| 💪 相对强度领先 | 65 | `relative_strength` |
+
+## Score Interpretation (v2)
+
+### Output Format
+
+The v2 screener outputs for each stock:
+
+1. **Foundation Score** (0-100): Weighted average of foundation components minus risk penalty.
+2. **Highlights Count**: Number of highlight signals that exceeded their thresholds.
+3. **Composite Score**: `foundation_score + Σ(highlight_confidence × 0.15)` — used for sorting.
+4. **Action**: Matched from condition rules (see below).
+5. **Triggered Highlights**: List of specific signals with confidence scores.
+
+### Short-term Action Rules
+
+| Condition | Label | Meaning |
+|-----------|-------|---------|
+| Base ≥ 55, HL ≥ 2 | **Strong Watch** | Multi-signal resonance |
+| Base ≥ 45, HL ≥ 1 | **Setup Watch** | Clear setup, await confirmation |
+| Base ≥ 35, HL ≥ 1 | **Alert** | Weak base but has highlight |
+| Base ≥ 35 | **Base OK** | Qualified but no signal yet |
+| Base < 35 | **Avoid** | Risk control rejection |
+
+### Long-term Action Rules
+
+| Condition | Label | Meaning |
+|-----------|-------|---------|
+| Base ≥ 65, HL ≥ 2 | **Thesis Candidate** | Deep thesis update |
+| Base ≥ 55, HL ≥ 1 | **DCF Candidate** | Valuation model needed |
+| Base ≥ 40, HL ≥ 1 | **Watch + Timing** | Has timing signal |
+| Base ≥ 40 | **Watchlist Only** | Wait for catalyst |
+| Base < 40 | **Reject** | Skip |
+
+### Threshold Tuning Guide
+
+Highlight thresholds can be adjusted in the preset JSON files. Guidelines:
+
+- **Raise threshold** (e.g., 55 → 65): Fewer but higher-quality signals. Use if getting too many false positives.
+- **Lower threshold** (e.g., 60 → 50): More signals, possibly noisier. Use if missing opportunities.
+- **Foundation min_score**: Raising this tightens the risk gate; lowering it lets more speculative setups through.
+
+Recommended approach: Run with current defaults for 2-4 weeks. Track which signals led to actual trade opportunities vs. noise. Adjust thresholds based on empirical hit rate.
+
+To test threshold changes without modifying the preset:
+
+```bash
+# View raw scores for all highlights
+python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --preset short_term_momentum --json | jq '.results[].highlight_details'
+```
 
 ## Performance Notes
 
@@ -128,3 +288,27 @@ Recommended defaults:
 - `--technical-cache-hours 0` only when a fresh scan matters more than runtime.
 
 For a thesis universe around 60 symbols, expect the daily layer to take roughly 40-60 seconds without a warm cache.
+
+Benchmark data (for relative strength) adds 1-3 extra API calls per run — one per market appearing in the symbol list. These are cached with the same TTL as regular kline data. For a typical thesis universe spanning US + A-share + HK, this adds roughly 2-3 seconds to runtime.
+
+## Intraday Volume Comparison (Apple-to-Apple)
+
+When comparing today's volume against a prior session, **always compare the same time window**—never compare a partial session against a full session.
+
+For A-share (09:30-15:00 CST), use `longbridge kline history --period 5m` to get intraday bars:
+
+```bash
+# 5m bars, UTC timestamps: 09:30 CST = 01:30 UTC
+# Yesterday's first hour (09:30-10:30 CST)
+longbridge kline history SYMBOL --start YYYY-MM-DD --end YYYY-MM-DD --period 5m
+# Sum 01:30-02:25 UTC bars = 12 bars covering 09:30-10:30 CST
+```
+
+Python aggregation pattern:
+```python
+# A股: 09:30-10:30 CST = UTC 01:30-02:30 = bars at 01:30,01:35,...,02:25
+first_hour_utc = [f"01:{m:02d}" for m in range(30,60)] + [f"02:{m:02d}" for m in range(0,30)]
+yesterday_vol = sum(b["vol"] for b in bars if b["time"][-8:-3] in first_hour_utc)
+```
+
+**Why this matters**: The screener's daily-summary volume (tens of millions of shares) is useless intraday. Only 5m-bar aggregation gives valid same-window comparison. A common mistake is comparing a partial trading day's total vol against a prior full-day total—this will always look like "volume shrinking" and produces false signals.

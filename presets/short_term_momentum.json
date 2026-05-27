@@ -1,8 +1,9 @@
 {
   "name": "short_term_momentum",
-  "label": "短线动量选股器",
+  "label": "短线动量选股器 v2",
+  "version": 2,
   "horizon": "1-4 weeks",
-  "description": "以 SMAM 动量为主，结合趋势结构、强势缩量回调、单针洗盘、MACD 相位、砖型动能、题材和短期催化剂，筛出适合盘中监控或试仓的候选。",
+  "description": "双层架构：基座分（趋势+动量+流动性）确保风控底座，亮点信号（单针洗盘/MACD相位/VCP收缩/K线反转/缠论背驰等）捕捉具体交易机会。任意一个亮点信号触发即值得关注。",
   "concept_keywords": [
     "AI",
     "人工智能",
@@ -20,22 +21,33 @@
     "并购",
     "重组"
   ],
-  "components": [
-    {"name": "momentum", "weight": 28},
-    {"name": "trend_regime", "weight": 16},
-    {"name": "pullback_setup", "weight": 16},
-    {"name": "single_needle_washout", "weight": 8},
-    {"name": "macd_phase_confirmation", "weight": 8},
-    {"name": "impulse_confirmation", "weight": 8},
-    {"name": "concept_strength", "weight": 10},
-    {"name": "liquidity_volume", "weight": 6},
-    {"name": "catalyst", "weight": 10},
-    {"name": "risk_penalty", "weight": -15}
+  "foundation": {
+    "min_score": 35,
+    "components": [
+      {"name": "trend_regime", "weight": 30},
+      {"name": "momentum", "weight": 25},
+      {"name": "liquidity_volume", "weight": 15},
+      {"name": "concept_strength", "weight": 10},
+      {"name": "catalyst", "weight": 10},
+      {"name": "risk_penalty", "weight": -20}
+    ]
+  },
+  "highlights": [
+    {"name": "single_needle_washout", "threshold": 60, "label": "🎯 单针洗盘"},
+    {"name": "macd_phase_confirmation", "threshold": 55, "label": "📈 MACD相位确认"},
+    {"name": "impulse_confirmation", "threshold": 60, "label": "🔥 砖型反转"},
+    {"name": "pullback_setup", "threshold": 50, "label": "🔄 强势回调"},
+    {"name": "vcp_pattern", "threshold": 55, "label": "📐 VCP收缩突破"},
+    {"name": "candlestick_reversal", "threshold": 60, "label": "🕯️ K线反转形态"},
+    {"name": "chan_divergence", "threshold": 55, "label": "📊 缠论背驰"},
+    {"name": "bollinger_squeeze", "threshold": 55, "label": "💎 布林收缩"},
+    {"name": "volume_price_divergence", "threshold": 60, "label": "📉 量价背离"}
   ],
   "actions": [
-    {"min_score": 70, "label": "Strong Watch", "next_step": "加入重点短线观察，等待突破、回踩或事件确认"},
-    {"min_score": 58, "label": "Setup Watch", "next_step": "保留在短线观察池，等待形态、量能或市场状态确认"},
-    {"min_score": 45, "label": "Theme Lead", "next_step": "只作为题材或备选线索，不直接交易"},
-    {"min_score": 0, "label": "Avoid Chase", "next_step": "动量或风险结构不够好，暂不追"}
+    {"condition": "foundation>=55 && highlights>=2", "label": "Strong Watch", "next_step": "多信号共振，加入重点短线观察，等待突破、回踩或事件确认"},
+    {"condition": "foundation>=45 && highlights>=1", "label": "Setup Watch", "next_step": "有明确setup信号，等待确认后试仓"},
+    {"condition": "foundation>=35 && highlights>=1", "label": "Alert", "next_step": "基座偏弱但有亮点，轻仓博弈或继续观察"},
+    {"condition": "foundation>=35", "label": "Base OK", "next_step": "基座合格但暂无亮点信号，持续跟踪等待setup"},
+    {"condition": "default", "label": "Avoid", "next_step": "基座不合格，趋势或风险结构不够好，暂不追"}
   ]
 }
