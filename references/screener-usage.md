@@ -7,6 +7,24 @@ Use `scripts/screen_stocks.py` for both short-term and long-term batch stock sel
 - `short_term_momentum`: short-term momentum and technical setup screener for 1-4 week candidates.
 - `long_term_compounder`: medium/long-term fundamental, valuation, and accumulation-quality screener for thesis and DCF candidates.
 
+## Score Bands
+
+Short-term `short_term_momentum` bands:
+
+- `70+`: `Strong Watch` — priority short-term watch candidate. Confirm with live price/volume and market state before acting.
+- `58-70`: `Setup Watch` — useful setup or trend clue. Wait for breakout, pullback, volume, or catalyst confirmation.
+- `45-58`: `Theme Lead` — theme or backup lead only.
+- `<45`: `Avoid Chase` — weak momentum/risk structure.
+
+Long-term `long_term_compounder` bands:
+
+- `76+`: `Thesis Candidate` — worth deep thesis update and explicit disconfirming conditions.
+- `66-76`: `DCF Candidate` — worth valuation model or peer-comparison work.
+- `52-66`: `Watchlist Only` — has a clue, but needs price, data, or catalyst validation.
+- `<52`: `Reject` — low priority for medium/long-term tracking.
+
+Use the bands as triage labels, not buy/sell signals. For small thesis pools, relative rank (`Top 10` / `Top 20`) matters more than an absolute score cutoff.
+
 ## Universe Inputs
 
 Choose one primary universe input:
@@ -79,3 +97,4 @@ python3 skills/neoalpha/scripts/screen_stocks.py --from-thesis --market CN --pre
 3. If the user names a market or sub-market, add the matching `--market`.
 4. If the user names a custom pool, named theme, or self-defined group, use `--group` or `--group-filter` with the configured group file.
 5. If the group file is missing or the group name is absent, report the available groups or ask for the symbol list before scanning.
+6. For owner-facing interpretation, use the score bands above and mention the relative rank when the universe is small.

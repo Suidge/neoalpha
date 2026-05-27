@@ -14,9 +14,9 @@
     {"name": "risk_penalty", "weight": -20}
   ],
   "actions": [
-    {"min_score": 82, "label": "Thesis Candidate", "next_step": "进入 thesis-tracker 深度更新，并明确反证条件"},
-    {"min_score": 70, "label": "DCF Candidate", "next_step": "补充估值模型或可比公司分析"},
-    {"min_score": 55, "label": "Watchlist Only", "next_step": "逻辑有线索，但等待价格、数据或催化剂验证"},
+    {"min_score": 76, "label": "Thesis Candidate", "next_step": "进入 thesis-tracker 深度更新，并明确反证条件"},
+    {"min_score": 66, "label": "DCF Candidate", "next_step": "补充估值模型或可比公司分析"},
+    {"min_score": 52, "label": "Watchlist Only", "next_step": "逻辑有线索，但等待价格、数据或催化剂验证"},
     {"min_score": 0, "label": "Reject", "next_step": "暂不进入中长线跟踪"}
   ]
 }

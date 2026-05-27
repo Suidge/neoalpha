@@ -33,9 +33,9 @@
     {"name": "risk_penalty", "weight": -15}
   ],
   "actions": [
-    {"min_score": 80, "label": "Strong Watch", "next_step": "加入盘中监控，等待突破、回踩或事件确认"},
-    {"min_score": 65, "label": "Setup Watch", "next_step": "保留在短线观察池，等待形态或量能确认"},
-    {"min_score": 50, "label": "Theme Lead", "next_step": "只作为题材线索，不直接交易"},
+    {"min_score": 70, "label": "Strong Watch", "next_step": "加入重点短线观察，等待突破、回踩或事件确认"},
+    {"min_score": 58, "label": "Setup Watch", "next_step": "保留在短线观察池，等待形态、量能或市场状态确认"},
+    {"min_score": 45, "label": "Theme Lead", "next_step": "只作为题材或备选线索，不直接交易"},
     {"min_score": 0, "label": "Avoid Chase", "next_step": "动量或风险结构不够好，暂不追"}
   ]
 }

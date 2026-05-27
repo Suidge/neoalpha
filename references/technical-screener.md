@@ -99,6 +99,24 @@ Use it after a pullback setup appears. It is better for confirming renewed stren
 
 Long-term screening deliberately does not treat B1, single-needle, or brick signals as company-quality factors. They only help with price structure and entry timing.
 
+## Score Interpretation
+
+Short-term scores are calibrated for sparse technical setups, so `70+` is already a strong watch candidate:
+
+- `70+`: priority watch.
+- `58-70`: setup watch.
+- `45-58`: theme or backup lead.
+- `<45`: avoid chasing.
+
+Long-term scores are calibrated for thesis-driven screening:
+
+- `76+`: thesis candidate.
+- `66-76`: DCF or peer-comparison candidate.
+- `52-66`: watchlist only.
+- `<52`: reject / low priority.
+
+For both presets, read the score with the ranking inside the scanned universe. A top-ranked stock in a narrow thesis pool can still be worth review even if the absolute score is below the strongest band.
+
 ## Performance Notes
 
 Longbridge supports batch `quote` and `calc-index`, but daily K-line history is one symbol per request. Avoid parallel bursts because the API can return `429002 api request is limited`.
