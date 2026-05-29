@@ -21,8 +21,7 @@ Each stock in the output includes:
 
 A stock can still report raw highlight diagnostics below the foundation gate, but highlight-triggered action upgrades only apply after the foundation minimum score is met (50 for short-term, 40 for long-term).
 
-The short-term preset includes `breakout_ignition` to catch fast range breaks and two-day momentum ignition that may not yet be reflected in 6-12 month SMAM momentum.
-When `breakout_ignition >= 80` and the foundation is at least 10, the screener emits **Ignition Alert** even below the normal foundation gate. Treat it as a fast-watch flag, not as a high-quality setup confirmation.
+The short-term preset includes `breakout_ignition` to catch early, actionable range breaks that may not yet be reflected in 6-12 month SMAM momentum. It deliberately suppresses post-spike moves when the stock is already extended, because high ranking should mean a current short-term entry opportunity.
 
 ## Action Rules
 
@@ -34,7 +33,6 @@ When `breakout_ignition >= 80` and the foundation is at least 10, the screener e
 | Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup, await price/volume confirmation |
 | Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal; observe, do not chase |
 | Base ≥ 50 | **Base OK** | Qualified foundation but no high-confidence setup yet |
-| Breakout ≥ 80, Base ≥ 10 | **Ignition Alert** | Fast breakout with weak foundation; quick watch, no chase |
 | Base < 50 | **Avoid** | Risk control rejection — weak trend, relative strength, liquidity, or risk structure |
 
 ### Long-term `long_term_compounder`

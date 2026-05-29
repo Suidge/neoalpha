@@ -262,10 +262,9 @@ The v2 screener outputs for each stock:
 | Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup |
 | Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal |
 | Base ≥ 50 | **Base OK** | Qualified but no high-confidence setup yet |
-| Breakout ≥ 80, Base ≥ 10 | **Ignition Alert** | Fast breakout with weak foundation; fast watch only |
 | Base < 50 | **Avoid** | Risk control rejection |
 
-`breakout_ignition` is designed for fast-starting names that may still have weak 6-12 month momentum but are breaking a recent range now. It scores recent 20/50-day range breaks, one-day or two-day price ignition, volume confirmation, close-near-high behavior, and gap-hold strength.
+`breakout_ignition` is designed for early, actionable range breaks that may still have weak 6-12 month momentum. It scores recent 20/50-day range breaks, controlled one-day or two-day price ignition, volume confirmation, close-near-high behavior, and gap-hold strength. If the move is already extended, the signal is suppressed instead of boosting rank, because short-term high scores should represent entry opportunities rather than post-spike recognition.
 
 ### Long-term Action Rules
 

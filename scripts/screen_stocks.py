@@ -744,7 +744,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
 
     # --- NEW v2 TECHNICAL SCORES ---
 
-    # Breakout ignition: fast price discovery after a range break.
+    # Breakout ignition: actionable early range break, not a post-spike chase flag.
     prior_20_high = max(h[-21:-1]) if len(h) >= 21 else max(h[:-1])
     prior_50_high = max(h[-51:-1]) if len(h) >= 51 else max(h[:-1])
     prev2_close = c[-3] if len(c) >= 3 else prev_close
@@ -755,17 +755,24 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     two_day_vol_ratio = max(v[-2], volume) / vol_ma20_prev if len(v) >= 2 and vol_ma20_prev else day_vol_ratio
     breakout_20d = close >= prior_20_high * 0.995 or high >= prior_20_high * 1.005
     breakout_50d = close >= prior_50_high * 0.995 or high >= prior_50_high * 1.005
-    price_ignition = one_day_return >= 6 or two_day_return >= 12
+    price_ignition = (2 <= one_day_return <= 7) or (4 <= two_day_return <= 12)
     volume_confirm = day_vol_ratio >= 1.2 or two_day_vol_ratio >= 1.5
     close_near_high = close_position >= 0.75
     gap_hold = open_ >= prev_close * 1.01 and close >= open_
+    breakout_extended = (breakout_20d or breakout_50d) and (
+        one_day_return > 8 or two_day_return > 15 or white_dist > 12 or yellow_dist > 15
+    )
     breakout_ignition_score = clamp(
-        (25 if breakout_20d else 0)
-        + (15 if breakout_50d else 0)
-        + (25 if price_ignition else 0)
-        + (15 if volume_confirm else 0)
-        + (10 if close_near_high else 0)
-        + (10 if gap_hold else 0)
+        0
+        if breakout_extended
+        else (
+            (25 if breakout_20d else 0)
+            + (15 if breakout_50d else 0)
+            + (25 if price_ignition else 0)
+            + (15 if volume_confirm else 0)
+            + (10 if close_near_high else 0)
+            + (10 if gap_hold else 0)
+        )
     )
 
     # VCP: Volatility Contraction Pattern detection
@@ -1117,6 +1124,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "price_ignition": price_ignition,
             "volume_confirm": volume_confirm,
             "gap_hold": gap_hold,
+            "breakout_extended": breakout_extended,
             "vcp_contracting": vcp_contracting,
             "vcp_near_pivot": vcp_near_pivot,
             "candlestick_pattern": best_pattern > 0,
@@ -1234,23 +1242,11 @@ def score_row(row: dict[str, Any], preset: dict[str, Any], thesis_dir: Path) -> 
 
     # Match action
     action = _match_v2_action(foundation_score, len(triggered_highlights), preset)
-    breakout_confidence = max(
-        (h["confidence"] for h in triggered_highlights if h["name"] == "breakout_ignition"),
-        default=0.0,
-    )
-    ignition_alert = action["label"] == "Avoid" and foundation_score >= 10 and breakout_confidence >= 80
-    if ignition_alert:
-        action = {
-            "label": "Ignition Alert",
-            "next_step": "放量突破启动但基座偏弱，列入快速观察；只等回踩不破或盘中延续确认，不追高",
-        }
 
     # Composite score for sorting: foundation + configurable highlight bonus.
     # Short-term presets should keep this modest so weak foundations do not outrank healthier bases solely on one signal.
     highlight_bonus_weight = float(preset.get("highlight_bonus_weight", 0.15))
     composite = foundation_score + sum(h["confidence"] * highlight_bonus_weight for h in triggered_highlights)
-    if ignition_alert:
-        composite = max(composite, 50 + (breakout_confidence - 70) * 0.25)
 
     return {
         "symbol": symbol,
