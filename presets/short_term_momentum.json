@@ -1,9 +1,9 @@
 {
   "name": "short_term_momentum",
   "label": "短线动量选股器 v2",
-  "version": 3,
+  "version": 4,
   "horizon": "1-4 weeks",
-  "description": "双层架构：基座分以趋势质量、动量、相对强度、流动性和风险扣分为主，题材/催化只作辅助；亮点信号采用更高阈值过滤低置信 setup。",
+  "description": "双层架构：基座分以趋势质量、动量、相对强度、流动性和风险扣分为主，题材/催化只作辅助；亮点信号覆盖回调洗盘与放量突破启动，并采用更高阈值过滤低置信 setup。",
   "highlight_bonus_weight": 0.10,
   "concept_keywords": [
     "AI",
@@ -39,6 +39,7 @@
     {"name": "single_needle_washout", "threshold": 70, "label": "🎯 单针洗盘"},
     {"name": "macd_phase_confirmation", "threshold": 70, "label": "📈 MACD相位确认"},
     {"name": "impulse_confirmation", "threshold": 70, "label": "🔥 砖型反转"},
+    {"name": "breakout_ignition", "threshold": 70, "label": "🚀 放量突破启动"},
     {"name": "pullback_setup", "threshold": 55, "label": "🔄 强势回调"},
     {"name": "vcp_pattern", "threshold": 65, "label": "📐 VCP收缩突破"},
     {"name": "candlestick_reversal", "threshold": 70, "label": "🕯️ K线反转形态"},

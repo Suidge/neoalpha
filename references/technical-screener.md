@@ -222,6 +222,7 @@ Highlight signals are evaluated independently. **Any single highlight firing is 
 | 🎯 单针洗盘 | 70 | `single_needle_washout` |
 | 📈 MACD相位确认 | 70 | `macd_phase_confirmation` |
 | 🔥 砖型反转 | 70 | `impulse_confirmation` |
+| 🚀 放量突破启动 | 70 | `breakout_ignition` |
 | 🔄 强势回调 | 55 | `pullback_setup` |
 | 📐 VCP收缩突破 | 65 | `vcp_pattern` |
 | 🕯️ K线反转形态 | 70 | `candlestick_reversal` |
@@ -261,7 +262,10 @@ The v2 screener outputs for each stock:
 | Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup |
 | Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal |
 | Base ≥ 50 | **Base OK** | Qualified but no high-confidence setup yet |
+| Breakout ≥ 80, Base ≥ 10 | **Ignition Alert** | Fast breakout with weak foundation; fast watch only |
 | Base < 50 | **Avoid** | Risk control rejection |
+
+`breakout_ignition` is designed for fast-starting names that may still have weak 6-12 month momentum but are breaking a recent range now. It scores recent 20/50-day range breaks, one-day or two-day price ignition, volume confirmation, close-near-high behavior, and gap-hold strength.
 
 ### Long-term Action Rules
 

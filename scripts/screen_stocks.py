@@ -744,6 +744,30 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
 
     # --- NEW v2 TECHNICAL SCORES ---
 
+    # Breakout ignition: fast price discovery after a range break.
+    prior_20_high = max(h[-21:-1]) if len(h) >= 21 else max(h[:-1])
+    prior_50_high = max(h[-51:-1]) if len(h) >= 51 else max(h[:-1])
+    prev2_close = c[-3] if len(c) >= 3 else prev_close
+    one_day_return = (close / prev_close - 1) * 100 if prev_close else 0.0
+    two_day_return = (close / prev2_close - 1) * 100 if prev2_close else one_day_return
+    vol_ma20_prev = sum(v[-21:-1]) / 20 if len(v) >= 21 else sum(v[:-1]) / max(len(v) - 1, 1)
+    day_vol_ratio = volume / vol_ma20_prev if vol_ma20_prev else 0.0
+    two_day_vol_ratio = max(v[-2], volume) / vol_ma20_prev if len(v) >= 2 and vol_ma20_prev else day_vol_ratio
+    breakout_20d = close >= prior_20_high * 0.995 or high >= prior_20_high * 1.005
+    breakout_50d = close >= prior_50_high * 0.995 or high >= prior_50_high * 1.005
+    price_ignition = one_day_return >= 6 or two_day_return >= 12
+    volume_confirm = day_vol_ratio >= 1.2 or two_day_vol_ratio >= 1.5
+    close_near_high = close_position >= 0.75
+    gap_hold = open_ >= prev_close * 1.01 and close >= open_
+    breakout_ignition_score = clamp(
+        (25 if breakout_20d else 0)
+        + (15 if breakout_50d else 0)
+        + (25 if price_ignition else 0)
+        + (15 if volume_confirm else 0)
+        + (10 if close_near_high else 0)
+        + (10 if gap_hold else 0)
+    )
+
     # VCP: Volatility Contraction Pattern detection
     lookback_vcp = min(120, len(c) - 5)
     swing_highs_vcp: list[tuple[int, float]] = []
@@ -1050,6 +1074,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         "impulse_confirmation": round(impulse_score, 1),
         "technical_regime": round(trend_score, 1),
         "accumulation_quality": round(accumulation_score, 1),
+        "breakout_ignition": round(breakout_ignition_score, 1),
         "vcp_pattern": round(vcp_score, 1),
         "candlestick_reversal": round(candlestick_score, 1),
         "chan_divergence": round(chan_score, 1),
@@ -1083,6 +1108,15 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "long": round(long[-1], 2),
             "lower_shadow_ratio": round(lower_shadow_ratio, 2),
             "close_position": round(close_position, 2),
+            "breakout_20d": breakout_20d,
+            "breakout_50d": breakout_50d,
+            "one_day_return_pct": round(one_day_return, 2),
+            "two_day_return_pct": round(two_day_return, 2),
+            "day_volume_ratio": round(day_vol_ratio, 2),
+            "two_day_volume_ratio": round(two_day_vol_ratio, 2),
+            "price_ignition": price_ignition,
+            "volume_confirm": volume_confirm,
+            "gap_hold": gap_hold,
             "vcp_contracting": vcp_contracting,
             "vcp_near_pivot": vcp_near_pivot,
             "candlestick_pattern": best_pattern > 0,
@@ -1142,6 +1176,7 @@ def component_score(name: str, row: dict[str, Any], text: str, preset: dict[str,
         "impulse_confirmation",
         "technical_regime",
         "accumulation_quality",
+        "breakout_ignition",
         "vcp_pattern",
         "candlestick_reversal",
         "chan_divergence",
@@ -1199,11 +1234,23 @@ def score_row(row: dict[str, Any], preset: dict[str, Any], thesis_dir: Path) -> 
 
     # Match action
     action = _match_v2_action(foundation_score, len(triggered_highlights), preset)
+    breakout_confidence = max(
+        (h["confidence"] for h in triggered_highlights if h["name"] == "breakout_ignition"),
+        default=0.0,
+    )
+    ignition_alert = action["label"] == "Avoid" and foundation_score >= 10 and breakout_confidence >= 80
+    if ignition_alert:
+        action = {
+            "label": "Ignition Alert",
+            "next_step": "放量突破启动但基座偏弱，列入快速观察；只等回踩不破或盘中延续确认，不追高",
+        }
 
     # Composite score for sorting: foundation + configurable highlight bonus.
     # Short-term presets should keep this modest so weak foundations do not outrank healthier bases solely on one signal.
     highlight_bonus_weight = float(preset.get("highlight_bonus_weight", 0.15))
     composite = foundation_score + sum(h["confidence"] * highlight_bonus_weight for h in triggered_highlights)
+    if ignition_alert:
+        composite = max(composite, 50 + (breakout_confidence - 70) * 0.25)
 
     return {
         "symbol": symbol,
