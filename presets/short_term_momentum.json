@@ -1,9 +1,10 @@
 {
   "name": "short_term_momentum",
   "label": "短线动量选股器 v2",
-  "version": 2,
+  "version": 3,
   "horizon": "1-4 weeks",
-  "description": "双层架构：基座分（趋势+动量+流动性）确保风控底座，亮点信号（单针洗盘/MACD相位/VCP收缩/K线反转/缠论背驰等）捕捉具体交易机会。任意一个亮点信号触发即值得关注。",
+  "description": "双层架构：基座分以趋势质量、动量、相对强度、流动性和风险扣分为主，题材/催化只作辅助；亮点信号采用更高阈值过滤低置信 setup。",
+  "highlight_bonus_weight": 0.10,
   "concept_keywords": [
     "AI",
     "人工智能",
@@ -22,32 +23,34 @@
     "重组"
   ],
   "foundation": {
-    "min_score": 35,
+    "min_score": 50,
     "components": [
-      {"name": "trend_regime", "weight": 30},
-      {"name": "momentum", "weight": 25},
-      {"name": "liquidity_volume", "weight": 15},
-      {"name": "concept_strength", "weight": 10},
-      {"name": "catalyst", "weight": 10},
-      {"name": "risk_penalty", "weight": -20}
+      {"name": "trend_regime", "weight": 24},
+      {"name": "momentum", "weight": 24},
+      {"name": "relative_strength", "weight": 18},
+      {"name": "liquidity_volume", "weight": 14},
+      {"name": "accumulation_quality", "weight": 10},
+      {"name": "concept_strength", "weight": 4},
+      {"name": "catalyst", "weight": 4},
+      {"name": "risk_penalty", "weight": -30}
     ]
   },
   "highlights": [
-    {"name": "single_needle_washout", "threshold": 60, "label": "🎯 单针洗盘"},
-    {"name": "macd_phase_confirmation", "threshold": 55, "label": "📈 MACD相位确认"},
-    {"name": "impulse_confirmation", "threshold": 60, "label": "🔥 砖型反转"},
-    {"name": "pullback_setup", "threshold": 50, "label": "🔄 强势回调"},
-    {"name": "vcp_pattern", "threshold": 55, "label": "📐 VCP收缩突破"},
-    {"name": "candlestick_reversal", "threshold": 60, "label": "🕯️ K线反转形态"},
-    {"name": "chan_divergence", "threshold": 55, "label": "📊 缠论背驰"},
-    {"name": "bollinger_squeeze", "threshold": 55, "label": "💎 布林收缩"},
-    {"name": "volume_price_divergence", "threshold": 60, "label": "📉 量价背离"}
+    {"name": "single_needle_washout", "threshold": 70, "label": "🎯 单针洗盘"},
+    {"name": "macd_phase_confirmation", "threshold": 70, "label": "📈 MACD相位确认"},
+    {"name": "impulse_confirmation", "threshold": 70, "label": "🔥 砖型反转"},
+    {"name": "pullback_setup", "threshold": 55, "label": "🔄 强势回调"},
+    {"name": "vcp_pattern", "threshold": 65, "label": "📐 VCP收缩突破"},
+    {"name": "candlestick_reversal", "threshold": 70, "label": "🕯️ K线反转形态"},
+    {"name": "chan_divergence", "threshold": 70, "label": "📊 缠论背驰"},
+    {"name": "bollinger_squeeze", "threshold": 65, "label": "💎 布林收缩"},
+    {"name": "volume_price_divergence", "threshold": 70, "label": "📉 量价背离"}
   ],
   "actions": [
-    {"condition": "foundation>=55 && highlights>=2", "label": "Strong Watch", "next_step": "多信号共振，加入重点短线观察，等待突破、回踩或事件确认"},
-    {"condition": "foundation>=45 && highlights>=1", "label": "Setup Watch", "next_step": "有明确setup信号，等待确认后试仓"},
-    {"condition": "foundation>=35 && highlights>=1", "label": "Alert", "next_step": "基座偏弱但有亮点，轻仓博弈或继续观察"},
-    {"condition": "foundation>=35", "label": "Base OK", "next_step": "基座合格但暂无亮点信号，持续跟踪等待setup"},
-    {"condition": "default", "label": "Avoid", "next_step": "基座不合格，趋势或风险结构不够好，暂不追"}
+    {"condition": "foundation>=68 && highlights>=2", "label": "Strong Watch", "next_step": "高质量趋势+多信号共振，列入重点短线观察；只在突破、回踩或催化确认后执行"},
+    {"condition": "foundation>=58 && highlights>=1", "label": "Setup Watch", "next_step": "基座质量合格且有明确setup，等待价格/量能确认"},
+    {"condition": "foundation>=50 && highlights>=1", "label": "Alert", "next_step": "基座刚达标且有单一亮点，只观察不追高"},
+    {"condition": "foundation>=50", "label": "Base OK", "next_step": "基座合格但暂无高置信setup，继续跟踪"},
+    {"condition": "default", "label": "Avoid", "next_step": "趋势、相对强度、流动性或风险结构不够好，暂不追"}
   ]
 }

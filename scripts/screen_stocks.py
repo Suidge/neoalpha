@@ -1200,8 +1200,10 @@ def score_row(row: dict[str, Any], preset: dict[str, Any], thesis_dir: Path) -> 
     # Match action
     action = _match_v2_action(foundation_score, len(triggered_highlights), preset)
 
-    # Composite score for sorting: foundation + highlight bonus
-    composite = foundation_score + sum(h["confidence"] * 0.15 for h in triggered_highlights)
+    # Composite score for sorting: foundation + configurable highlight bonus.
+    # Short-term presets should keep this modest so weak foundations do not outrank healthier bases solely on one signal.
+    highlight_bonus_weight = float(preset.get("highlight_bonus_weight", 0.15))
+    composite = foundation_score + sum(h["confidence"] * highlight_bonus_weight for h in triggered_highlights)
 
     return {
         "symbol": symbol,

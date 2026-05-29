@@ -15,11 +15,11 @@ Each stock in the output includes:
 
 1. **Foundation Score** (0-100): Weighted average of foundation components (trend, momentum, volume, etc.) minus risk penalty.
 2. **Highlights Count**: Number of independent highlight signals that fired above their thresholds.
-3. **Composite Score**: `foundation_score + Σ(highlight_confidence × 0.15)` — used for sorting/ranking.
+3. **Composite Score**: `foundation_score + Σ(highlight_confidence × highlight_bonus_weight)` — used for sorting/ranking. The short-term preset uses `highlight_bonus_weight = 0.10`.
 4. **Action Label**: Determined by foundation score + highlights count (see Action Rules below).
 5. **Triggered Highlights**: List of specific signals with emoji, name, and confidence score.
 
-A stock must pass the foundation minimum score (35 for short-term, 40 for long-term) before highlights are evaluated. **Any single highlight firing is enough** to upgrade the action label.
+A stock can still report raw highlight diagnostics below the foundation gate, but highlight-triggered action upgrades only apply after the foundation minimum score is met (50 for short-term, 40 for long-term).
 
 ## Action Rules
 
@@ -27,11 +27,11 @@ A stock must pass the foundation minimum score (35 for short-term, 40 for long-t
 
 | Condition | Label | Meaning |
 |-----------|-------|---------|
-| Base ≥ 55, HL ≥ 2 | **Strong Watch** | Multi-signal resonance — priority short-term candidate |
-| Base ≥ 45, HL ≥ 1 | **Setup Watch** | Clear setup, await breakout/volume/catalyst confirmation |
-| Base ≥ 35, HL ≥ 1 | **Alert** | Weak base but has a highlight signal worth monitoring |
-| Base ≥ 35 | **Base OK** | Qualified foundation but no highlight signal yet |
-| Base < 35 | **Avoid** | Risk control rejection — weak momentum/risk structure |
+| Base ≥ 68, HL ≥ 2 | **Strong Watch** | High-quality trend plus multi-signal resonance |
+| Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup, await price/volume confirmation |
+| Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal; observe, do not chase |
+| Base ≥ 50 | **Base OK** | Qualified foundation but no high-confidence setup yet |
+| Base < 50 | **Avoid** | Risk control rejection — weak trend, relative strength, liquidity, or risk structure |
 
 ### Long-term `long_term_compounder`
 

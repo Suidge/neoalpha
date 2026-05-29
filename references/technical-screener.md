@@ -188,16 +188,18 @@ Both presets now use a dual-layer architecture: **Foundation** (risk-control gat
 
 ### Foundation Layer
 
-Foundation components are weighted-averaged to produce a base score (0-100). A stock must meet the minimum foundation score to enter highlight evaluation.
+Foundation components are weighted-averaged to produce a base score (0-100). Raw highlight diagnostics are still reported below the foundation gate, but action upgrades require meeting the minimum foundation score.
 
-`short_term_momentum` foundation (min 35):
+`short_term_momentum` foundation (min 50):
 
-- `trend_regime` (weight 30) — primary risk filter
-- `momentum` (weight 25) — SMAM directional confirmation
-- `liquidity_volume` (weight 15) — tradability
-- `concept_strength` (weight 10) — theme relevance
-- `catalyst` (weight 10) — catalyst presence
-- `risk_penalty` (weight -20) — risk deduction
+- `trend_regime` (weight 24) — primary risk filter
+- `momentum` (weight 24) — SMAM directional confirmation
+- `relative_strength` (weight 18) — performance versus benchmark
+- `liquidity_volume` (weight 14) — tradability
+- `accumulation_quality` (weight 10) — trend quality and supply absorption
+- `concept_strength` (weight 4) — theme relevance, auxiliary only
+- `catalyst` (weight 4) — catalyst presence, auxiliary only
+- `risk_penalty` (weight -30) — risk deduction
 
 `long_term_compounder` foundation (min 40):
 
@@ -217,15 +219,15 @@ Highlight signals are evaluated independently. **Any single highlight firing is 
 
 | Signal | Threshold | Source |
 |--------|-----------|--------|
-| 🎯 单针洗盘 | 60 | `single_needle_washout` |
-| 📈 MACD相位确认 | 55 | `macd_phase_confirmation` |
-| 🔥 砖型反转 | 60 | `impulse_confirmation` |
-| 🔄 强势回调 | 50 | `pullback_setup` |
-| 📐 VCP收缩突破 | 55 | `vcp_pattern` |
-| 🕯️ K线反转形态 | 60 | `candlestick_reversal` |
-| 📊 缠论背驰 | 55 | `chan_divergence` |
-| 💎 布林收缩 | 55 | `bollinger_squeeze` |
-| 📉 量价背离 | 60 | `volume_price_divergence` |
+| 🎯 单针洗盘 | 70 | `single_needle_washout` |
+| 📈 MACD相位确认 | 70 | `macd_phase_confirmation` |
+| 🔥 砖型反转 | 70 | `impulse_confirmation` |
+| 🔄 强势回调 | 55 | `pullback_setup` |
+| 📐 VCP收缩突破 | 65 | `vcp_pattern` |
+| 🕯️ K线反转形态 | 70 | `candlestick_reversal` |
+| 📊 缠论背驰 | 70 | `chan_divergence` |
+| 💎 布林收缩 | 65 | `bollinger_squeeze` |
+| 📉 量价背离 | 70 | `volume_price_divergence` |
 
 `long_term_compounder` highlights:
 
@@ -247,7 +249,7 @@ The v2 screener outputs for each stock:
 
 1. **Foundation Score** (0-100): Weighted average of foundation components minus risk penalty.
 2. **Highlights Count**: Number of highlight signals that exceeded their thresholds.
-3. **Composite Score**: `foundation_score + Σ(highlight_confidence × 0.15)` — used for sorting.
+3. **Composite Score**: `foundation_score + Σ(highlight_confidence × highlight_bonus_weight)` — used for sorting. The short-term preset uses `0.10` to keep one-off signals from overwhelming foundation quality.
 4. **Action**: Matched from condition rules (see below).
 5. **Triggered Highlights**: List of specific signals with confidence scores.
 
@@ -255,11 +257,11 @@ The v2 screener outputs for each stock:
 
 | Condition | Label | Meaning |
 |-----------|-------|---------|
-| Base ≥ 55, HL ≥ 2 | **Strong Watch** | Multi-signal resonance |
-| Base ≥ 45, HL ≥ 1 | **Setup Watch** | Clear setup, await confirmation |
-| Base ≥ 35, HL ≥ 1 | **Alert** | Weak base but has highlight |
-| Base ≥ 35 | **Base OK** | Qualified but no signal yet |
-| Base < 35 | **Avoid** | Risk control rejection |
+| Base ≥ 68, HL ≥ 2 | **Strong Watch** | High-quality trend plus multi-signal resonance |
+| Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup |
+| Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal |
+| Base ≥ 50 | **Base OK** | Qualified but no high-confidence setup yet |
+| Base < 50 | **Avoid** | Risk control rejection |
 
 ### Long-term Action Rules
 
