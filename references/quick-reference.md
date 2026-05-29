@@ -4,6 +4,7 @@ Use this table to route a user request to the smallest relevant reference or scr
 
 | Request | Use |
 |---------|-----|
+| Market tape reading / trading session / extended-hours safeguards | [market-operations.md](market-operations.md) |
 | Data sources or fallback rules | [data-layer.md](data-layer.md) |
 | Earnings analysis | [earnings-workflow.md](earnings-workflow.md) |
 | Earnings preview | [earnings-preview.md](earnings-preview.md) |

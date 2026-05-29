@@ -1,7 +1,7 @@
 ---
 name: NeoAlpha
 slug: neoalpha
-version: 3.3.1
+version: 3.3.2
 description: Run quantamental stock research, thesis tracking, preset screeners, valuation workflows, portfolio ledgers, and multi-market monitoring across equities.
 ---
 
@@ -21,12 +21,16 @@ Use for stock research, investment thesis creation or updates, momentum screenin
 4. **Keep the research discipline** — facts before inference, verification before judgment, risk before return, quantified payoff.
 5. **Use preset screeners for batch evaluation** — for short-term or long-term stock selection, call `scripts/screen_stocks.py` with an explicit preset and universe.
 6. **Prioritize market state intraday** — `market_watch` is the live workflow's primary object; single-stock triggers are evidence.
+7. **Identify the market session first** — for tape reading or short-term analysis, state whether the target market is premarket, regular session, postmarket, closed, lunch break, or cross-day.
+8. **Do not misuse extended-hours fields** — only cite premarket/postmarket fields when the current time is actually inside that session; otherwise treat them as stale historical context.
+9. **Refresh live data for live judgments** — intraday/tape-reading answers must pull fresh data in the current session and avoid stale cache unless explicitly disclosed.
 
 ## Quick Reference
 
 See [references/quick-reference.md](references/quick-reference.md) for request routing.
 
 Common entry points:
+- Market operations and trading-time safeguards: [references/market-operations.md](references/market-operations.md)
 - Thesis tracking: [references/thesis-tracker.md](references/thesis-tracker.md)
 - Initiating coverage: [references/initiating-coverage.md](references/initiating-coverage.md)
 - Momentum model: [references/momentum-model.md](references/momentum-model.md)

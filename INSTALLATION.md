@@ -48,6 +48,8 @@ python3 --version
 
 ## Quick Install
 
+NeoAlpha includes its market operations manual at `references/market-operations.md`. It is part of the skill package and requires no separate workspace runbook installation. Use it for trading-session checks, premarket/postmarket safeguards, live-data freshness rules, and tape-reading output discipline.
+
 ### 1. Copy the skill directory
 
 Copy the NeoAlpha skill directory into your OpenClaw workspace:

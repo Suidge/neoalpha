@@ -178,6 +178,7 @@ python3 skills/neoalpha/scripts/validate_hk_strategy.py
 核心文档：
 
 - [SKILL.md](SKILL.md)：技能入口和路由规则
+- [references/market-operations.md](references/market-operations.md)：盘面分析、交易时段与 Extended Hours 防误用规则
 - [references/thesis-tracker.md](references/thesis-tracker.md)：thesis 管理规则
 - [references/quick-reference.md](references/quick-reference.md)：请求路由速查
 - [references/momentum-model.md](references/momentum-model.md)：SMAM 动量模型
