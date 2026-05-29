@@ -23,6 +23,8 @@ Stock Momentum Scanner — 基于 Asness, Moskowitz & Pedersen (2013)
 
 """
 
+from __future__ import annotations
+
 import json
 import math
 import re

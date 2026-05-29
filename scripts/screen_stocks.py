@@ -281,7 +281,7 @@ def thesis_text(symbol: str, thesis_dir: Path = THESIS_DIR) -> str:
 
 def run_momentum_scan(symbols: list[str]) -> dict[str, Any]:
     cmd = [
-        "python3",
+        sys.executable,
         str(MOMENTUM_SCANNER),
         "--symbols",
         ",".join(symbols),
@@ -579,9 +579,9 @@ def _technical_inputs(rows: list[dict[str, Any]]) -> dict[str, Any]:
     long = []
     for i, close in enumerate(closes):
         low3 = min(lows[max(0, i - 2) : i + 1])
-        high3 = max(closes[max(0, i - 2) : i + 1])
+        high3 = max(highs[max(0, i - 2) : i + 1])
         low21 = min(lows[max(0, i - 20) : i + 1])
-        high21 = max(closes[max(0, i - 20) : i + 1])
+        high21 = max(highs[max(0, i - 20) : i + 1])
         short.append(50.0 if high3 == low3 else 100 * (close - low3) / (high3 - low3))
         long.append(50.0 if high21 == low21 else 100 * (close - low21) / (high21 - low21))
 
@@ -646,7 +646,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     )
     recent_range = (_hhv(h, 20) - _llv(l, 20)) / _llv(l, 20) * 100 if _llv(l, 20) else 0
     far_range = (_hhv(h, 50) - _llv(l, 50)) / _llv(l, 50) * 100 if _llv(l, 50) else 0
-    single_needle = (short[-1] <= 20 and long[-1] >= 75) or (long[-1] - short[-1] >= 70)
+    stochastic_washout = (short[-1] <= 20 and long[-1] >= 75) or (long[-1] - short[-1] >= 70)
     washout = _count([(ss <= 20 and ll >= 75) or (ll - ss >= 70) for ss, ll in zip(short, long)], 10) >= 2
     vday = _bars_since_highest(v, 40)
     big_green = vday < len(c) and c[-1 - vday] < c[-2 - vday] and c[-1 - vday] < o[-1 - vday] if len(c) > vday + 1 else False
@@ -660,6 +660,26 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     bbi_dist = abs(close - bbi_now) / close * 100 if bbi_now and close else 100
     low_bbi_dist = abs(low - bbi_now) / bbi_now * 100 if bbi_now else 100
     yellow_dist = abs(close - yellow_now) / yellow_now * 100 if yellow_now and close else 100
+    low_yellow_dist = abs(low - yellow_now) / yellow_now * 100 if yellow_now else 100
+    body_size = abs(close - open_)
+    upper_shadow = high - max(close, open_)
+    lower_shadow = min(close, open_) - low
+    candle_range = high - low
+    lower_shadow_ratio = lower_shadow / body_size if body_size else 99.0
+    close_position = (close - low) / candle_range if candle_range else 0.5
+    long_lower_shadow = bool(
+        candle_range > 0
+        and lower_shadow_ratio >= 1.5
+        and lower_shadow >= candle_range * 0.35
+        and close_position >= 0.55
+        and upper_shadow <= max(body_size * 0.8, candle_range * 0.25)
+    )
+    needle_support_touch = bool(
+        (white_now and low_white_dist <= 2.5)
+        or (bbi_now and low_bbi_dist <= 2.5)
+        or (yellow_now and low_yellow_dist <= 2.5)
+    )
+    single_needle = stochastic_washout and long_lower_shadow and needle_support_touch
     pullback_white = (
         (white_now and close >= white_now and white_dist <= 2)
         or (white_now and close < white_now and white_dist < 0.8)
@@ -688,7 +708,11 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         "pullback_yellow": yellow_b1 and big_green_ok and (shrink or super_shrink) and recent_range >= 11.9 and far_range >= 19.5,
     }
     b1_score = clamp(sum(22 if hit else 0 for hit in b1_hits.values()) + (12 if washout else 0))
-    needle_score = clamp((45 if single_needle else 0) + (25 if trend_ok else 0) + (15 if shrink or super_shrink else 0) + (15 if active_range else 0))
+    needle_score = clamp(
+        0
+        if not single_needle
+        else 60 + (15 if trend_ok else 0) + (15 if shrink or super_shrink else 0) + (10 if active_range else 0)
+    )
     macd_crosses = [_crossed_up(data["dif"], data["dea"], offset=i) for i in range(min(21, len(c) - 1))]
     recent_cross = any(macd_crosses[:5])
     zero_up = data["dif"][-1] > 0 and data["dea"][-1] > 0
@@ -1041,6 +1065,9 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "super_shrink": super_shrink,
             "active_range": active_range,
             "single_needle": single_needle,
+            "stochastic_washout": stochastic_washout,
+            "long_lower_shadow": long_lower_shadow,
+            "needle_support_touch": needle_support_touch,
             "recent_macd_cross": recent_cross,
             "macd_above_zero": zero_up,
             "strong_brick_turn": strong_red,
@@ -1054,6 +1081,8 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "rsi3": round(rsi3[-1], 2),
             "short": round(short[-1], 2),
             "long": round(long[-1], 2),
+            "lower_shadow_ratio": round(lower_shadow_ratio, 2),
+            "close_position": round(close_position, 2),
             "vcp_contracting": vcp_contracting,
             "vcp_near_pivot": vcp_near_pivot,
             "candlestick_pattern": best_pattern > 0,

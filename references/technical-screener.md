@@ -70,9 +70,13 @@ Use it for 1-10 trading day watch candidates. It is an entry-timing signal, not 
 
 ### Single Needle Washout
 
-Inspired by `单针选股.txt` and `单针洗盘-日线附图.txt`. It looks for short stochastic washouts while longer stochastic location stays high.
+Inspired by `单针选股.txt` and `单针洗盘-日线附图.txt`. It requires three conditions to fire:
 
-Use it only inside a good trend regime. Without trend and volume filters, single-needle signals can select downtrend continuation.
+- Short stochastic washout while longer stochastic location stays high.
+- A real long-lower-shadow candle: lower shadow at least 1.5x the body, at least 35% of the full daily range, close in the upper half of the range, and no heavy upper-shadow rejection.
+- A support touch near the white line, BBI, or yellow line.
+
+Trend, volume shrinkage, and recent range activity are confirmation bonuses only. They must not create a single-needle score when the core stochastic washout + candle + support conditions are absent. Use it only inside a good trend regime. Without trend and volume filters, single-needle signals can select downtrend continuation.
 
 ### MACD Phase Confirmation
 

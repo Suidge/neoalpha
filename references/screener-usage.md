@@ -146,6 +146,10 @@ To support active intraday decision-making (e.g., assessing a stock after a sudd
 * This provides 100% fresh, real-time intraday K-line calculations for single stocks or tiny watchlists without requiring manual flags.
 * Larger pools (>= 10 symbols) still respect the `--technical-cache-hours` configuration to avoid exceeding Longbridge CLI rate limits.
 
+### Single Needle Washout Guardrail
+
+`single_needle_washout` is a strict highlight signal. It only scores when the stochastic washout, long-lower-shadow candle, and support-touch conditions are all present. Trend state, volume shrinkage, and active range are confirmation bonuses; they cannot by themselves produce a single-needle highlight.
+
 ## Agent Routing Rules
 
 1. If the user says "短线选股器", use `--preset short_term_momentum`.
