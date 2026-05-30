@@ -182,6 +182,52 @@ Composite RS = 0.4 × RS_63d + 0.2 × RS_126d + 0.2 × RS_189d + 0.2 × RS_252d
 
 Mapped to 0-100. Requires benchmark kline data (1-3 extra API calls per run, cached).
 
+### Tight Base Setup (v3.3.3)
+
+Based on Mark Minervini's VCP pivot tightening and O'Neil's tight close concepts:
+* **NR7 Narrow Day**: Today's high-low range is the narrowest among the last 7 trading days.
+* **ATR Compression**: 5-day ATR / 20-day ATR < 0.65 (extreme volatility squeeze).
+* **Close Tightness**: Standard deviation of closing prices over the last 5 days < 1.2% of MA20 (extreme price stability).
+* **Volume Extreme Drying**: 5-day average volume < 20-day average volume * 50% (supply exhausted).
+* **Near Resistance**: Close >= 95% of 50-day high (tightening at the key overhead resistance).
+* **Trend Healthy**: MA50 > MA150 > MA200 and MA200 is rising.
+* **Inside Day**: High < prev_high and Low > prev_low.
+* **Relative Strength**: Composite RS score >= 50.
+
+Calculated as a highlight (threshold 55). Extremely reliable for predicting explosive breakouts 1-3 days in advance.
+
+### Volume Dry Pocket (v3.3.3)
+
+Detects quiet institutional accumulation under the surface where price remains flat but buying force builds:
+* **Extreme Volume Drying**: 3-day average volume < 50-day average volume * 40%.
+* **Volume Decreasing**: Volume of the last 3 days strictly declining day-by-day.
+* **Price Stable**: Closing price fluctuation over the last 3 days is < 3%.
+* **OBV Rising While Flat**: OBV trends up over the last 20 days but price fails to make a new 20-day high (institutional quiet buying).
+* **Near 52-Week High**: Distance to 52-week high is < 25%.
+* **Above MA50**: Price stays above MA50.
+
+Calculated as a highlight (threshold 60). Designed to detect setups like QCOM at $150 or IBM before chips act.
+
+### Pre-Breakout Tension (v3.3.3)
+
+Captures the "fully compressed spring" setup right at the resistance pivot:
+* **Near 20-Day Resistance**: Close within 3% of 20-day high.
+* **Bollinger Squeezed**: Bollinger Band width rank < 25% (imminent volatility explosion).
+* **Multiple Inside Days**: At least 2 inside days in the last 3 days (extremely coiled spring).
+* **Volume Dry + Price Flat**: 5-day volume < MA50 volume * 70% while 5-day price range < 2%.
+* **Trend Template OK**: At least 6 out of Minervini's 8 trend conditions met.
+* **RS Rising**: Composite relative strength score today > 20 days ago (relative strength accelerating).
+
+Calculated as a highlight (threshold 65). Designed to detect apexes of symmetric triangles and wedges.
+
+### Overextension Penalty (v3.3.3)
+
+A negative-weighted risk component (weight -25) designed to prevent chasing high momentum at the absolute peak (e.g. buying after a 20% spike):
+* **MA20 Bias**: Penalty applied when price is >8% above MA20 (`penalty += min((bias_ma20 - 8) * 4, 35)`).
+* **MA50 Bias**: Penalty applied when price is >15% above MA50 (`penalty += min((bias_ma50 - 15) * 3, 30)`).
+* **Consecutive Up-Closes**: If consecutive up-closes >= 7, penalty is +20; if >= 5, penalty is +10.
+* **High Volatility at Highs**: If price within 3% of 52-week high but ATR ratio > 1.3, penalty is +15.
+
 ## Preset Mapping (v2 Architecture)
 
 Both presets now use a dual-layer architecture: **Foundation** (risk-control gate) + **Highlights** (opportunity detection).
@@ -190,16 +236,18 @@ Both presets now use a dual-layer architecture: **Foundation** (risk-control gat
 
 Foundation components are weighted-averaged to produce a base score (0-100). Raw highlight diagnostics are still reported below the foundation gate, but action upgrades require meeting the minimum foundation score.
 
-`short_term_momentum` foundation (min 50):
+`short_term_momentum` foundation (min 45 in v3.3.3):
 
-- `trend_regime` (weight 24) — primary risk filter
-- `momentum` (weight 24) — SMAM directional confirmation
+- `trend_regime` (weight 22) — primary risk filter
+- `momentum` (weight 10) — SMAM directional confirmation (reduced in v3.3.3 to avoid monthly lag)
 - `relative_strength` (weight 18) — performance versus benchmark
-- `liquidity_volume` (weight 14) — tradability
-- `accumulation_quality` (weight 10) — trend quality and supply absorption
+- `liquidity_volume` (weight 12) — tradability
+- `accumulation_quality` (weight 12) — trend quality and supply absorption
+- `tight_base_setup` (weight 14) — forward-looking tightness quality (new in v3.3.3)
 - `concept_strength` (weight 4) — theme relevance, auxiliary only
 - `catalyst` (weight 4) — catalyst presence, auxiliary only
-- `risk_penalty` (weight -30) — risk deduction
+- `risk_penalty` (weight -25) — risk deduction
+- `overextension_penalty` (weight -25) — penalty for high-chasing (new in v3.3.3)
 
 `long_term_compounder` foundation (min 40):
 
@@ -229,6 +277,9 @@ Highlight signals are evaluated independently. **Any single highlight firing is 
 | 📊 缠论背驰 | 70 | `chan_divergence` |
 | 💎 布林收缩 | 65 | `bollinger_squeeze` |
 | 📉 量价背离 | 70 | `volume_price_divergence` |
+| 📐 窄幅收敛蓄势 | 55 | `tight_base_setup` |
+| 📥 缩量机构吸筹 | 60 | `volume_dry_pocket` |
+| ⚡ 突破前高张力 | 65 | `pre_breakout_tension` |
 
 `long_term_compounder` highlights:
 
@@ -248,7 +299,7 @@ Highlight signals are evaluated independently. **Any single highlight firing is 
 
 The v2 screener outputs for each stock:
 
-1. **Foundation Score** (0-100): Weighted average of foundation components minus risk penalty.
+1. **Foundation Score** (0-100): Weighted average of foundation components minus risk penalties.
 2. **Highlights Count**: Number of highlight signals that exceeded their thresholds.
 3. **Composite Score**: `foundation_score + Σ(highlight_confidence × highlight_bonus_weight)` — used for sorting. The short-term preset uses `0.10` to keep one-off signals from overwhelming foundation quality.
 4. **Action**: Matched from condition rules (see below).
@@ -260,11 +311,11 @@ The v2 screener outputs for each stock:
 |-----------|-------|---------|
 | Base ≥ 68, HL ≥ 2 | **Strong Watch** | High-quality trend plus multi-signal resonance |
 | Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup |
-| Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal |
-| Base ≥ 50 | **Base OK** | Qualified but no high-confidence setup yet |
-| Base < 50 | **Avoid** | Risk control rejection |
+| Base ≥ 45, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal |
+| Base ≥ 45 | **Base OK** | Qualified but no high-confidence setup yet |
+| Base < 45 | **Avoid** | Risk control rejection |
 
-`breakout_ignition` is designed for early, actionable range breaks that may still have weak 6-12 month momentum. It scores recent 20/50-day range breaks, controlled one-day or two-day price ignition, volume confirmation, close-near-high behavior, and gap-hold strength. If the move is already extended, the signal is suppressed instead of boosting rank, because short-term high scores should represent entry opportunities rather than post-spike recognition.
+`breakout_ignition` is designed for early, actionable range breaks that may still have weak 6-12 month momentum. In v3.3.3, it is split into a **Pre-Ignition (蓄势期)** stage (scores 45 when within 2-5% of 20-day high with Tight Base or Volume Dry triggered) and a **Confirming Ignition** stage. If the move is already extended, the signal is suppressed instead of boosting rank, because short-term high scores should represent entry opportunities rather than post-spike recognition.
 
 ### Long-term Action Rules
 

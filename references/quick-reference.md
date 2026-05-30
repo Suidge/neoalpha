@@ -31,7 +31,7 @@ Use this table to route a user request to the smallest relevant reference or scr
 | Model audit | [model-audit.md](model-audit.md) |
 | Unit economics | [unit-economics.md](unit-economics.md) |
 | Returns analysis | [returns-analysis.md](returns-analysis.md) |
-| Preset stock screener / short-term and long-term batch scans / market or group universe | [screener-usage.md](screener-usage.md) |
+| Preset stock screener / short-term and long-term batch scans / market or group universe / historical backtester | [screener-usage.md](screener-usage.md) |
 | Earnings preview script | `scripts/analyze_earnings_preview.py <SYMBOL> --output text` |
 | Earnings recap script | `scripts/analyze_earnings_recap.py <SYMBOL> --output text` |
 | Strategy YAML library | [../strategies/](../strategies/) |

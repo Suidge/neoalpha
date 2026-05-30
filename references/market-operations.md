@@ -194,3 +194,6 @@ Use this order for tape or single-stock analysis:
 
 For user-held positions, add position risk, T+1/T+0 constraint, and executable action window.
 
+
+| **Assuming today is a non-trading day** | Before any market answer, run `LC_ALL=C date` to confirm day of week. If unsure, pull 000001.SH quote to verify market status. Never infer the date from K-line timestamps. |
+| **Reporting stale quote data as live intraday prices** | `longbridge quote` returns the most recent snapshot, which may be yesterday's close during non-US market hours or as-of-open for A-shares. For live intraday reading, always confirm the market is currently in session AND pull `longbridge intraday` for per-minute tick data. If the `last` price in `longbridge quote` matches `prev_close` or `close` of the latest K-line, do not claim it as current intraday movement. |

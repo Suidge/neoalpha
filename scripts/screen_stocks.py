@@ -499,9 +499,12 @@ def _normalize_kline_items(data: Any) -> list[dict[str, Any]]:
         low = _to_float(item.get("low") or item.get("l"), None)
         open_ = _to_float(item.get("open") or item.get("o"), None)
         volume = _to_float(item.get("volume") or item.get("vol") or item.get("v"), 0.0)
+        dt = item.get("time") or item.get("timestamp") or item.get("date") or ""
+        if " " in dt:
+            dt = dt.split(" ")[0]
         if close is None or high is None or low is None or open_ is None:
             continue
-        rows.append({"open": open_, "high": high, "low": low, "close": close, "volume": volume})
+        rows.append({"open": open_, "high": high, "low": low, "close": close, "volume": volume, "date": dt})
     return rows
 
 
@@ -631,6 +634,16 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     j, rsi3, short, long = data["j"], data["rsi3"], data["short"], data["long"]
     close, open_, high, low, volume = c[-1], o[-1], h[-1], l[-1], v[-1]
     prev_close = c[-2] if len(c) > 1 else close
+
+    ma20_list = _ma(c, 20)
+    ma50_list = _ma(c, 50)
+    ma150_list = _ma(c, 150)
+    ma200_list = _ma(c, 200)
+    ma200_now = _latest(ma200_list)
+    ma200_1mo = _latest(ma200_list, 20)
+    ma150_now = _latest(ma150_list)
+    ma50_now = _latest(ma50_list)
+    ma20_val = ma20_list[-1] if len(ma20_list) > 0 else close
     amplitude = (high - low) / low * 100 if low else 0
     change_abs = abs(close - prev_close) / prev_close * 100 if prev_close else 0
     is_up_doji = close > prev_close and abs(close - open_) / open_ * 100 < 1.8 if open_ else False
@@ -762,10 +775,178 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     breakout_extended = (breakout_20d or breakout_50d) and (
         one_day_return > 8 or two_day_return > 15 or white_dist > 12 or yellow_dist > 15
     )
-    breakout_ignition_score = clamp(
-        0
-        if breakout_extended
-        else (
+
+    # --- ADVANCED FORWARD-LOOKING PRE-BREAKOUT METRICS ---
+
+    # 1. Tight Base Setup
+    ranges_7 = [h[idx] - l[idx] for idx in range(max(0, len(c) - 7), len(c))]
+    nr7 = (high - low) == min(ranges_7) if ranges_7 else False
+    
+    tr_list = []
+    for ti in range(1, len(c)):
+        tr_list.append(max(h[ti] - l[ti], abs(h[ti] - c[ti - 1]), abs(l[ti] - c[ti - 1])))
+    atr5 = sum(tr_list[-5:]) / 5 if len(tr_list) >= 5 else 0.001
+    atr20 = sum(tr_list[-20:]) / 20 if len(tr_list) >= 20 else 0.001
+    atr_ratio = atr5 / atr20 if atr20 else 1.0
+    atr_compressed = atr_ratio < 0.65
+
+    c_5 = c[-5:]
+    mean_5 = sum(c_5) / 5
+    std_5 = (sum((cx - mean_5) ** 2 for cx in c_5) / 5) ** 0.5
+    ma20_val = ma20_list[-1] if ma20_list[-1] is not None else close
+    close_tightness = std_5 / ma20_val * 100 < 1.2 if ma20_val else False
+
+    vol_ma5 = sum(v[-5:]) / 5 if len(v) >= 5 else volume
+    vol_ma20 = sum(v[-20:]) / 20 if len(v) >= 20 else volume
+    vol_compressed = vol_ma5 < vol_ma20 * 0.50
+
+    near_resistance = close >= prior_50_high * 0.95
+    
+    trend_healthy = bool(
+        ma50_now and ma150_now and ma200_now and ma200_1mo
+        and ma50_now > ma150_now > ma200_now
+        and ma200_now > ma200_1mo
+    )
+    inside_day = high < h[-2] and low > l[-2] if len(h) >= 2 else False
+    
+    # We will compute rs_val later, but since we need it for rs_not_weak, we compute rs_val inline here!
+    rs_val = 50.0
+    if benchmark_closes and len(benchmark_closes) > 252 and len(c) > 252:
+        def _period_rs(stock: list[float], bench: list[float], period: int) -> float:
+            if len(stock) > period and len(bench) > period:
+                stock_ret = stock[-1] / stock[-period - 1] - 1 if stock[-period - 1] else 0
+                bench_ret = bench[-1] / bench[-period - 1] - 1 if bench[-period - 1] else 0
+                return stock_ret - bench_ret
+            return 0.0
+        rs_63 = _period_rs(c, benchmark_closes, 63)
+        rs_126 = _period_rs(c, benchmark_closes, 126)
+        rs_189 = _period_rs(c, benchmark_closes, 189)
+        rs_252 = _period_rs(c, benchmark_closes, 252)
+        composite_rs = 0.4 * rs_63 + 0.2 * rs_126 + 0.2 * rs_189 + 0.2 * rs_252
+        rs_val = clamp((composite_rs + 0.3) / 0.6 * 100)
+    rs_not_weak = rs_val >= 50
+
+    tight_base_score = float(
+        (15 if nr7 else 0)
+        + (15 if atr_compressed else 0)
+        + (15 if close_tightness else 0)
+        + (15 if vol_compressed else 0)
+        + (10 if near_resistance else 0)
+        + (10 if trend_healthy else 0)
+        + (10 if inside_day else 0)
+        + (10 if rs_not_weak else 0)
+    )
+
+    # 2. Volume Dry Pocket
+    vol_ma3 = sum(v[-3:]) / 3 if len(v) >= 3 else volume
+    vol_ma50 = sum(v[-50:]) / 50 if len(v) >= 50 else volume
+    vol_dry_extreme = vol_ma3 < vol_ma50 * 0.40 if vol_ma50 else False
+    vol_decreasing = v[-1] < v[-2] < v[-3] if len(v) >= 3 else False
+    price_stable = (max(c[-3:]) - min(c[-3:])) / close * 100 < 3.0 if len(c) >= 3 and close else False
+    
+    # Compute OBV inline to ensure it is available for obv_rising_while_flat
+    obv: list[float] = [0.0]
+    for vi in range(1, len(c)):
+        if c[vi] > c[vi - 1]:
+            obv.append(obv[-1] + v[vi])
+        elif c[vi] < c[vi - 1]:
+            obv.append(obv[-1] - v[vi])
+        else:
+            obv.append(obv[-1])
+    obv_rising = obv[-1] > obv[-20] if len(obv) >= 20 else False
+    price_flat = close < max(h[-20:-1]) if len(h) >= 20 else False
+    obv_rising_while_flat = obv_rising and price_flat
+
+    lookback_52w = min(252, len(c))
+    year_high = _hhv(h, lookback_52w)
+    near_52w_high = year_high > 0 and (year_high - close) / year_high * 100 < 25
+    above_ma50 = close > ma50_now if ma50_now else False
+
+    volume_dry_score = float(
+        (30 if vol_dry_extreme else 0)
+        + (15 if vol_decreasing else 0)
+        + (15 if price_stable else 0)
+        + (15 if obv_rising_while_flat else 0)
+        + (10 if near_52w_high else 0)
+        + (15 if above_ma50 else 0)
+    )
+
+    # 3. Pre-Breakout Tension
+    near_20d_resistance = close >= prior_20_high * 0.97
+    
+    # Calculate Bollinger Squeeze and BB Width Rank inline to ensure it's available
+    squeeze_on = False
+    bb_width_rank = 50.0
+    if ma20_val and ma20_val > 0:
+        bb_stds = []
+        for bi in range(max(20, len(c) - 120), len(c)):
+            c_slice = c[max(0, bi - 19) : bi + 1]
+            c_mean = sum(c_slice) / len(c_slice)
+            bb_stds.append((sum((cx - c_mean) ** 2 for cx in c_slice) / len(c_slice)) ** 0.5)
+        current_std = bb_stds[-1] if bb_stds else 0
+        bb_upper_val = ma20_val + 2 * current_std
+        bb_lower_val = ma20_val - 2 * current_std
+        bb_width = (bb_upper_val - bb_lower_val) / ma20_val * 100
+        bb_widths = [(2 * s * 2) / ma20_val * 100 for s in bb_stds] if bb_stds else [bb_width]
+        bb_width_rank = sum(1 for bw in bb_widths if bw <= bb_width) / max(len(bb_widths), 1) * 100
+        
+        atr14 = sum(tr_list[-14:]) / 14 if len(tr_list) >= 14 else (sum(tr_list) / max(len(tr_list), 1))
+        ema20_val = _ema(c, 20)[-1]
+        kc_upper_val = ema20_val + 1.5 * atr14
+        kc_lower_val = ema20_val - 1.5 * atr14
+        squeeze_on = bb_upper_val < kc_upper_val and bb_lower_val > kc_lower_val
+    boll_squeezed_tight = bb_width_rank < 25.0
+
+    inside_days_3 = sum(1 for idx in range(-3, 0) if h[idx] < h[idx-1] and l[idx] > l[idx-1]) if len(c) >= 4 else 0
+    multiple_inside_days = inside_days_3 >= 2
+    vol_dry_price_flat = (vol_ma5 < vol_ma50 * 0.70) and ((max(c[-5:]) - min(c[-5:])) / close * 100 < 2.0) if vol_ma50 and close else False
+    
+    tt_conditions = 0
+    if ma150_now and ma200_now:
+        if close > ma150_now and close > ma200_now: tt_conditions += 1
+        if ma150_now > ma200_now: tt_conditions += 1
+    if ma200_now and ma200_1mo and ma200_now > ma200_1mo: tt_conditions += 1
+    if ma50_now and ma150_now and ma200_now:
+        if ma50_now > ma150_now and ma50_now > ma200_now: tt_conditions += 1
+    if ma50_now and close > ma50_now: tt_conditions += 1
+    year_low = _llv(l, lookback_52w)
+    if year_low > 0 and (close / year_low - 1) >= 0.30: tt_conditions += 1
+    if year_high > 0 and (year_high / close - 1) <= 0.25: tt_conditions += 1
+    if len(c) > 126 and c[-1] > c[-126]: tt_conditions += 1
+    trend_template_ok = tt_conditions >= 6
+
+    rs_rising = False
+    if benchmark_closes and len(benchmark_closes) > 272 and len(c) > 272:
+        def _composite_rs_at(offset: int) -> float:
+            sc = c[:-offset] if offset else c
+            bc = benchmark_closes[:-offset] if offset else benchmark_closes
+            r63 = _period_rs(sc, bc, 63)
+            r126 = _period_rs(sc, bc, 126)
+            r189 = _period_rs(sc, bc, 189)
+            r252 = _period_rs(sc, bc, 252)
+            return 0.4 * r63 + 0.2 * r126 + 0.2 * r189 + 0.2 * r252
+        rs_rising = _composite_rs_at(0) > _composite_rs_at(20)
+
+    pre_breakout_tension_score = float(
+        (25 if near_20d_resistance else 0)
+        + (20 if boll_squeezed_tight else 0)
+        + (15 if multiple_inside_days else 0)
+        + (20 if vol_dry_price_flat else 0)
+        + (10 if trend_template_ok else 0)
+        + (10 if rs_rising else 0)
+    )
+
+    # 4. Double-stage Breakout Ignition: Pre-Ignition (蓄势期) and Ignition (确认期)
+    pre_ignition = (
+        close >= prior_20_high * 0.95 and close < prior_20_high
+        and (tight_base_score >= 55 or volume_dry_score >= 60 or pre_breakout_tension_score >= 65)
+    )
+    if pre_ignition:
+        breakout_ignition_score = 45.0
+    elif breakout_extended:
+        breakout_ignition_score = 0.0
+    else:
+        breakout_ignition_score = float(
             (25 if breakout_20d else 0)
             + (15 if breakout_50d else 0)
             + (25 if price_ignition else 0)
@@ -773,7 +954,30 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             + (10 if close_near_high else 0)
             + (10 if gap_hold else 0)
         )
-    )
+
+    # 5. Overextension Penalty (乖离率惩罚)
+    bias_ma20 = (close / ma20_val - 1) * 100 if ma20_val else 0.0
+    bias_ma50 = (close / ma50_now - 1) * 100 if ma50_now else 0.0
+    penalty = 0.0
+    if bias_ma20 > 8:
+        penalty += min((bias_ma20 - 8) * 4, 35)
+    if bias_ma50 > 15:
+        penalty += min((bias_ma50 - 15) * 3, 30)
+
+    consecutive_up = 0
+    for idx in range(-1, -21, -1):
+        if len(c) > abs(idx) and c[idx] > c[idx - 1]:
+            consecutive_up += 1
+        else:
+            break
+    if consecutive_up >= 7:
+        penalty += 20
+    elif consecutive_up >= 5:
+        penalty += 10
+
+    if close > year_high * 0.97 and atr_ratio > 1.3:
+        penalty += 15
+    overextension_penalty_score = clamp(penalty)
 
     # VCP: Volatility Contraction Pattern detection
     lookback_vcp = min(120, len(c) - 5)
@@ -939,7 +1143,6 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     )
 
     # Bollinger Squeeze (TTM Squeeze)
-    ma20_list = _ma(c, 20)
     boll_squeeze_val = 0.0
     if ma20_list[-1] is not None and ma20_list[-1] > 0:
         bb_stds: list[float] = []
@@ -1006,14 +1209,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         + (10 if trend_ok else 0)
     )
 
-    # Trend Template (Minervini 8 conditions)
-    ma50_list = _ma(c, 50)
-    ma150_list = _ma(c, 150)
-    ma200_list = _ma(c, 200)
-    ma50_now = _latest(ma50_list)
-    ma150_now = _latest(ma150_list)
-    ma200_now = _latest(ma200_list)
-    ma200_1mo = _latest(ma200_list, 20)
+    # Trend Template (Minervini 8 conditions) - lists and now values computed at top
     tt_conditions = 0
     if ma150_now and ma200_now:
         if close > ma150_now and close > ma200_now:
@@ -1090,6 +1286,10 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         "trend_template": round(trend_template_val, 1),
         "wave_position": round(wave_val, 1),
         "relative_strength": round(rs_val, 1),
+        "tight_base_setup": round(tight_base_score, 1),
+        "volume_dry_pocket": round(volume_dry_score, 1),
+        "pre_breakout_tension": round(pre_breakout_tension_score, 1),
+        "overextension_penalty": round(overextension_penalty_score, 1),
         "signals": {
             "trend_ok": trend_ok,
             "strong_trend": strong_trend,
@@ -1134,6 +1334,30 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "trend_template_conditions": tt_conditions,
             "wave_stage": wave_val,
             "rs_score": round(rs_val, 1),
+            "nr7": nr7,
+            "atr_ratio": round(atr_ratio, 2),
+            "close_tightness": close_tightness,
+            "vol_compressed": vol_compressed,
+            "near_resistance": near_resistance,
+            "trend_healthy": trend_healthy,
+            "inside_day": inside_day,
+            "rs_not_weak": rs_not_weak,
+            "vol_dry_extreme": vol_dry_extreme,
+            "vol_decreasing": vol_decreasing,
+            "price_stable": price_stable,
+            "obv_rising_while_flat": obv_rising_while_flat,
+            "near_52w_high": near_52w_high,
+            "above_ma50": above_ma50,
+            "near_20d_resistance": near_20d_resistance,
+            "boll_squeezed_tight": boll_squeezed_tight,
+            "multiple_inside_days": multiple_inside_days,
+            "vol_dry_price_flat": vol_dry_price_flat,
+            "trend_template_ok": trend_template_ok,
+            "rs_rising": rs_rising,
+            "bias_ma20": round(bias_ma20, 2),
+            "bias_ma50": round(bias_ma50, 2),
+            "consecutive_up": consecutive_up,
+            "overextension_penalty_score": round(overextension_penalty_score, 2),
         },
     }
 
@@ -1193,6 +1417,10 @@ def component_score(name: str, row: dict[str, Any], text: str, preset: dict[str,
         "trend_template",
         "wave_position",
         "relative_strength",
+        "tight_base_setup",
+        "volume_dry_pocket",
+        "pre_breakout_tension",
+        "overextension_penalty",
     }:
         technical = row.get("technical") or {}
         return float(technical.get(name) or 0)

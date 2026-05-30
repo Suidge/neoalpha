@@ -1,7 +1,7 @@
 ---
 name: NeoAlpha
 slug: neoalpha
-version: 3.3.2
+version: 3.3.3
 description: Run quantamental stock research, thesis tracking, preset screeners, valuation workflows, portfolio ledgers, and multi-market monitoring across equities.
 ---
 
@@ -34,7 +34,8 @@ Common entry points:
 - Thesis tracking: [references/thesis-tracker.md](references/thesis-tracker.md)
 - Initiating coverage: [references/initiating-coverage.md](references/initiating-coverage.md)
 - Momentum model: [references/momentum-model.md](references/momentum-model.md)
-- Preset screeners and batch universes: [references/screener-usage.md](references/screener-usage.md)
+- Preset stock screeners and technical signals: [references/technical-screener.md](references/technical-screener.md)
+- Screener execution and backtesting: [references/screener-usage.md](references/screener-usage.md)
 - Portfolio monitoring: [references/portfolio-monitoring.md](references/portfolio-monitoring.md)
 - Architecture: [references/architecture.md](references/architecture.md)
 

@@ -152,6 +152,29 @@ To support active intraday decision-making (e.g., assessing a stock after a sudd
 
 `single_needle_washout` is a strict highlight signal. It only scores when the stochastic washout, long-lower-shadow candle, and support-touch conditions are all present. Trend state, volume shrinkage, and active range are confirmation bonuses; they cannot by themselves produce a single-needle highlight.
 
+## Historical Backtesting Framework (New in v3.3.3)
+
+Use `scripts/backtest_screener.py` to historically validate signal effectiveness using a sliding-window simulation:
+1. **Target Pool**: Dynamically loads all US stock symbols inside `~/Documents/neoalpha/thesis-tracker/` (by parsing `<SYMBOL>.US.md`).
+2. **Sliding-Window Simulation**: Runs a historical daily loop over the past N trading days (default 250), calculating scores under identical historical constraints.
+3. **Execution Modeling**: Triggers a "Buy" signal on days when the score matches trigger parameters. It assumes buying at the **day's closing price** (as opposed to next-day open).
+4. **Statistics**: Reports Hit Rate (Win %), Avg Gain, Avg Win/Loss, Profit Factor, Average Max Drawdown, and Worst Drawdown during holding periods.
+
+### Backtester Commands
+
+```bash
+# Backtest the short_term_momentum preset on IBM/HOOD/QCOM/INTC case studies
+python3 scripts/backtest_screener.py --symbols IBM.US,HOOD.US,QCOM.US,INTC.US --signal all --lookback-days 120
+
+# Backtest a specific highlight signal (e.g., tight_base_setup) on the entire thesis pool
+python3 scripts/backtest_screener.py --from-thesis --signal tight_base_setup --threshold 55 --lookback-days 120
+
+# Backtest all signals on the entire thesis-tracker pool over a full year (250 days)
+python3 scripts/backtest_screener.py --from-thesis --signal all --lookback-days 250
+```
+
+*Note: For realistic historical simulation, the backtesting framework automatically computes historical momentum variables (`MOM_12_1`, `cms`, `stability`, `vam`, `volume_ratio`) for each day `t` dynamically, avoiding the flat 0 dilution bias.*
+
 ## Agent Routing Rules
 
 1. If the user says "短线选股器", use `--preset short_term_momentum`.

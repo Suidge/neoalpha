@@ -23,16 +23,18 @@
     "重组"
   ],
   "foundation": {
-    "min_score": 50,
+    "min_score": 45,
     "components": [
-      {"name": "trend_regime", "weight": 24},
-      {"name": "momentum", "weight": 24},
+      {"name": "trend_regime", "weight": 22},
+      {"name": "momentum", "weight": 10},
       {"name": "relative_strength", "weight": 18},
-      {"name": "liquidity_volume", "weight": 14},
-      {"name": "accumulation_quality", "weight": 10},
+      {"name": "liquidity_volume", "weight": 12},
+      {"name": "accumulation_quality", "weight": 12},
       {"name": "concept_strength", "weight": 4},
       {"name": "catalyst", "weight": 4},
-      {"name": "risk_penalty", "weight": -30}
+      {"name": "tight_base_setup", "weight": 14},
+      {"name": "risk_penalty", "weight": -25},
+      {"name": "overextension_penalty", "weight": -25}
     ]
   },
   "highlights": [
@@ -45,13 +47,16 @@
     {"name": "candlestick_reversal", "threshold": 70, "label": "🕯️ K线反转形态"},
     {"name": "chan_divergence", "threshold": 70, "label": "📊 缠论背驰"},
     {"name": "bollinger_squeeze", "threshold": 65, "label": "💎 布林收缩"},
-    {"name": "volume_price_divergence", "threshold": 70, "label": "📉 量价背离"}
+    {"name": "volume_price_divergence", "threshold": 70, "label": "📉 量价背离"},
+    {"name": "tight_base_setup", "threshold": 55, "label": "📐 窄幅收敛蓄势"},
+    {"name": "volume_dry_pocket", "threshold": 60, "label": "📥 缩量机构吸筹"},
+    {"name": "pre_breakout_tension", "threshold": 65, "label": "⚡ 突破前高张力"}
   ],
   "actions": [
     {"condition": "foundation>=68 && highlights>=2", "label": "Strong Watch", "next_step": "高质量趋势+多信号共振，列入重点短线观察；只在突破、回踩或催化确认后执行"},
     {"condition": "foundation>=58 && highlights>=1", "label": "Setup Watch", "next_step": "基座质量合格且有明确setup，等待价格/量能确认"},
-    {"condition": "foundation>=50 && highlights>=1", "label": "Alert", "next_step": "基座刚达标且有单一亮点，只观察不追高"},
-    {"condition": "foundation>=50", "label": "Base OK", "next_step": "基座合格但暂无高置信setup，继续跟踪"},
+    {"condition": "foundation>=45 && highlights>=1", "label": "Alert", "next_step": "基座刚达标且有单一亮点，只观察不追高"},
+    {"condition": "foundation>=45", "label": "Base OK", "next_step": "基座合格但暂无高置信setup，继续跟踪"},
     {"condition": "default", "label": "Avoid", "next_step": "趋势、相对强度、流动性或风险结构不够好，暂不追"}
   ]
 }
