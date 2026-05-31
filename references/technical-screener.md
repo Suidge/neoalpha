@@ -182,6 +182,17 @@ Composite RS = 0.4 × RS_63d + 0.2 × RS_126d + 0.2 × RS_189d + 0.2 × RS_252d
 
 Mapped to 0-100. Requires benchmark kline data (1-3 extra API calls per run, cached).
 
+### Market Regime (v3.3.4)
+
+Short-term setups are discounted when the benchmark itself is weak. The screener derives a market-regime score from the same benchmark series used for relative strength:
+
+- Benchmark close above MA20 and MA50.
+- Benchmark MA50 above MA200.
+- Benchmark MA200 rising versus roughly one month ago.
+- Benchmark 20-day and 60-day returns positive.
+
+Mapped to 0-100. It is a foundation component, not a highlight; weak markets should lower sizing and action priority even when a single stock has an attractive candle pattern.
+
 ### Tight Base Setup (v3.3.3)
 
 Based on Mark Minervini's VCP pivot tightening and O'Neil's tight close concepts:
@@ -220,6 +231,20 @@ Captures the "fully compressed spring" setup right at the resistance pivot:
 
 Calculated as a highlight (threshold 65). Designed to detect apexes of symmetric triangles and wedges.
 
+### Low-Risk Entry (v3.3.4)
+
+Detects constructive entries where the stock is already in a valid trend but risk is controlled:
+
+* **Constructive Pullback**: trend remains healthy, price holds above or near MA50, close position is not weak, and the day is not a sharp breakdown.
+* **Near Rising Support**: close is within 3% of a rising support cluster (white line, BBI, yellow line, MA20, or MA50).
+* **Support Reclaim**: intraday low tests MA20/white/BBI and closes back above support.
+* **Supply Absorption**: 5-day volume cools versus 20-day volume or day volume is below average, without distribution clusters.
+* **Controlled Range**: ATR is not expanding aggressively and daily amplitude stays contained.
+* **Higher-Low Base**: recent lows do not break the prior base.
+* **Risk Clear**: the signal is capped when false-breakout/distribution risk is high or overextension is severe.
+
+Calculated as a highlight (threshold 70) and as a foundation component. It is intended to catch valid buyable pullbacks that old momentum-only scoring tended to under-rank.
+
 ### Overextension Penalty (v3.3.3)
 
 A negative-weighted risk component (weight -25) designed to prevent chasing high momentum at the absolute peak (e.g. buying after a 20% spike):
@@ -227,6 +252,20 @@ A negative-weighted risk component (weight -25) designed to prevent chasing high
 * **MA50 Bias**: Penalty applied when price is >15% above MA50 (`penalty += min((bias_ma50 - 15) * 3, 30)`).
 * **Consecutive Up-Closes**: If consecutive up-closes >= 7, penalty is +20; if >= 5, penalty is +10.
 * **High Volatility at Highs**: If price within 3% of 52-week high but ATR ratio > 1.3, penalty is +15.
+
+### False Breakout / Distribution Risk (v3.3.4)
+
+A negative-weighted risk component designed to avoid chasing failed breakouts and professional distribution:
+
+* **Failed Breakout**: high probes above 20-day or 50-day resistance but closes back below the pivot.
+* **Failed Breakout on Volume**: failed breakout with day volume at least 1.4x the 20-day average.
+* **Upper Rejection / Gap Fade**: large upper shadow, weak close position, or gap-up that closes back below the open.
+* **High-Volume Churn**: unusually high volume with little or no price progress.
+* **Climax Reversal**: intraday extension >5% from prior close, weak close, and volume expansion.
+* **Distribution Cluster**: repeated down closes on elevated volume over 10-20 trading days.
+* **Relative-Weak Breakout**: resistance probe while relative strength is weak.
+
+This component is not a short signal. It reduces foundation score and suppresses breakout ignition when risk is high, because the system's job is to rank buyable setups, not volatile traps.
 
 ## Preset Mapping (v2 Architecture)
 
@@ -236,18 +275,21 @@ Both presets now use a dual-layer architecture: **Foundation** (risk-control gat
 
 Foundation components are weighted-averaged to produce a base score (0-100). Raw highlight diagnostics are still reported below the foundation gate, but action upgrades require meeting the minimum foundation score.
 
-`short_term_momentum` foundation (min 45 in v3.3.3):
+`short_term_momentum` foundation (min 45 in v3.3.4):
 
-- `trend_regime` (weight 22) — primary risk filter
-- `momentum` (weight 10) — SMAM directional confirmation (reduced in v3.3.3 to avoid monthly lag)
-- `relative_strength` (weight 18) — performance versus benchmark
-- `liquidity_volume` (weight 12) — tradability
+- `trend_regime` (weight 18) — primary stock-level risk filter
+- `market_regime` (weight 8) — benchmark trend and tape health
+- `momentum` (weight 8) — SMAM directional confirmation
+- `relative_strength` (weight 15) — performance versus benchmark
+- `liquidity_volume` (weight 10) — tradability
 - `accumulation_quality` (weight 12) — trend quality and supply absorption
-- `tight_base_setup` (weight 14) — forward-looking tightness quality (new in v3.3.3)
-- `concept_strength` (weight 4) — theme relevance, auxiliary only
-- `catalyst` (weight 4) — catalyst presence, auxiliary only
+- `low_risk_entry` (weight 15) — buyable pullback/base quality (new in v3.3.4)
+- `tight_base_setup` (weight 8) — forward-looking tightness quality
+- `concept_strength` (weight 3) — theme relevance, auxiliary only
+- `catalyst` (weight 3) — catalyst presence, auxiliary only
 - `risk_penalty` (weight -25) — risk deduction
-- `overextension_penalty` (weight -25) — penalty for high-chasing (new in v3.3.3)
+- `overextension_penalty` (weight -25) — penalty for high-chasing
+- `false_breakout_distribution_risk` (weight -35) — failed-breakout and distribution penalty (new in v3.3.4)
 
 `long_term_compounder` foundation (min 40):
 
@@ -271,6 +313,7 @@ Highlight signals are evaluated independently. **Any single highlight firing is 
 | 📈 MACD相位确认 | 70 | `macd_phase_confirmation` |
 | 🔥 砖型反转 | 70 | `impulse_confirmation` |
 | 🚀 放量突破启动 | 70 | `breakout_ignition` |
+| 🟢 低风险买点 | 70 | `low_risk_entry` |
 | 🔄 强势回调 | 55 | `pullback_setup` |
 | 📐 VCP收缩突破 | 65 | `vcp_pattern` |
 | 🕯️ K线反转形态 | 70 | `candlestick_reversal` |

@@ -19,9 +19,9 @@ Each stock in the output includes:
 4. **Action Label**: Determined by foundation score + highlights count (see Action Rules below).
 5. **Triggered Highlights**: List of specific signals with emoji, name, and confidence score.
 
-A stock can still report raw highlight diagnostics below the foundation gate, but highlight-triggered action upgrades only apply after the foundation minimum score is met (50 for short-term, 40 for long-term).
+A stock can still report raw highlight diagnostics below the foundation gate, but highlight-triggered action upgrades only apply after the foundation minimum score is met (45 for short-term, 40 for long-term).
 
-The short-term preset includes `breakout_ignition` to catch early, actionable range breaks that may not yet be reflected in 6-12 month SMAM momentum. It deliberately suppresses post-spike moves when the stock is already extended, because high ranking should mean a current short-term entry opportunity.
+The short-term preset includes `low_risk_entry` for constructive pullbacks and `breakout_ignition` for actionable range breaks that may not yet be reflected in 6-12 month SMAM momentum. It deliberately suppresses post-spike moves and failed breakouts when the stock is already extended or showing distribution, because high ranking should mean a current short-term entry opportunity.
 
 ## Action Rules
 
@@ -31,9 +31,9 @@ The short-term preset includes `breakout_ignition` to catch early, actionable ra
 |-----------|-------|---------|
 | Base ≥ 68, HL ≥ 2 | **Strong Watch** | High-quality trend plus multi-signal resonance |
 | Base ≥ 58, HL ≥ 1 | **Setup Watch** | Quality foundation with a clear setup, await price/volume confirmation |
-| Base ≥ 50, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal; observe, do not chase |
-| Base ≥ 50 | **Base OK** | Qualified foundation but no high-confidence setup yet |
-| Base < 50 | **Avoid** | Risk control rejection — weak trend, relative strength, liquidity, or risk structure |
+| Base ≥ 45, HL ≥ 1 | **Alert** | Barely qualified foundation with one signal; observe, do not chase |
+| Base ≥ 45 | **Base OK** | Qualified foundation but no high-confidence setup yet |
+| Base < 45 | **Avoid** | Risk control rejection — weak trend, relative strength, liquidity, or risk structure |
 
 ### Long-term `long_term_compounder`
 
@@ -122,6 +122,7 @@ The `--json` output includes `architecture: "v2_foundation_highlights"` at the t
       "action": "Strong Watch",
       "highlights": [
         {"signal": "🔄 强势回调", "source": "pullback_setup", "confidence": 68},
+        {"signal": "🟢 低风险买点", "source": "low_risk_entry", "confidence": 76},
         {"signal": "📐 VCP收缩突破", "source": "vcp_pattern", "confidence": 57}
       ],
       "foundation_details": {
@@ -152,25 +153,30 @@ To support active intraday decision-making (e.g., assessing a stock after a sudd
 
 `single_needle_washout` is a strict highlight signal. It only scores when the stochastic washout, long-lower-shadow candle, and support-touch conditions are all present. Trend state, volume shrinkage, and active range are confirmation bonuses; they cannot by themselves produce a single-needle highlight.
 
-## Historical Backtesting Framework (New in v3.3.3)
+## Historical Backtesting Framework (Updated in v3.3.4)
 
 Use `scripts/backtest_screener.py` to historically validate signal effectiveness using a sliding-window simulation:
-1. **Target Pool**: Dynamically loads all US stock symbols inside `~/Documents/neoalpha/thesis-tracker/` (by parsing `<SYMBOL>.US.md`).
+1. **Target Pool**: Dynamically loads symbols from `~/Documents/neoalpha/thesis-tracker/` and supports `--market US/HK/CN/A/SH/SZ`.
 2. **Sliding-Window Simulation**: Runs a historical daily loop over the past N trading days (default 250), calculating scores under identical historical constraints.
 3. **Execution Modeling**: Triggers a "Buy" signal on days when the score matches trigger parameters. It assumes buying at the **day's closing price** (as opposed to next-day open).
-4. **Statistics**: Reports Hit Rate (Win %), Avg Gain, Avg Win/Loss, Profit Factor, Average Max Drawdown, and Worst Drawdown during holding periods.
+4. **Cooldown Deduping**: `--cooldown-days` prevents repeated same-symbol triggers from inflating sample size.
+5. **Benchmark Mapping**: US uses `SPY.US`, A-share uses `000300.SH`, HK uses `2800.HK` for relative strength and market regime.
+6. **Statistics**: Reports Hit Rate (Win %), Avg Gain, Avg Win/Loss, Profit Factor, Average Max Drawdown, and Worst Drawdown during holding periods.
 
 ### Backtester Commands
 
 ```bash
 # Backtest the short_term_momentum preset on IBM/HOOD/QCOM/INTC case studies
-python3 scripts/backtest_screener.py --symbols IBM.US,HOOD.US,QCOM.US,INTC.US --signal all --lookback-days 120
+python3 scripts/backtest_screener.py --symbols IBM.US,HOOD.US,QCOM.US,INTC.US --signal all --lookback-days 120 --cooldown-days 5
 
 # Backtest a specific highlight signal (e.g., tight_base_setup) on the entire thesis pool
-python3 scripts/backtest_screener.py --from-thesis --signal tight_base_setup --threshold 55 --lookback-days 120
+python3 scripts/backtest_screener.py --from-thesis --market US --signal tight_base_setup --threshold 55 --lookback-days 120 --cooldown-days 5
 
 # Backtest all signals on the entire thesis-tracker pool over a full year (250 days)
-python3 scripts/backtest_screener.py --from-thesis --signal all --lookback-days 250
+python3 scripts/backtest_screener.py --from-thesis --market CN --signal all --lookback-days 250 --cooldown-days 5
+
+# Backtest the new low-risk-entry signal directly
+python3 scripts/backtest_screener.py --from-thesis --market US --signal low_risk_entry --threshold 70 --lookback-days 230 --cooldown-days 5
 ```
 
 *Note: For realistic historical simulation, the backtesting framework automatically computes historical momentum variables (`MOM_12_1`, `cms`, `stability`, `vam`, `volume_ratio`) for each day `t` dynamically, avoiding the flat 0 dilution bias.*

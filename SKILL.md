@@ -1,7 +1,7 @@
 ---
 name: NeoAlpha
 slug: neoalpha
-version: 3.3.3
+version: 3.3.4
 description: Run quantamental stock research, thesis tracking, preset screeners, valuation workflows, portfolio ledgers, and multi-market monitoring across equities.
 ---
 

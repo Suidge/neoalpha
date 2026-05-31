@@ -766,10 +766,14 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     vol_ma20_prev = sum(v[-21:-1]) / 20 if len(v) >= 21 else sum(v[:-1]) / max(len(v) - 1, 1)
     day_vol_ratio = volume / vol_ma20_prev if vol_ma20_prev else 0.0
     two_day_vol_ratio = max(v[-2], volume) / vol_ma20_prev if len(v) >= 2 and vol_ma20_prev else day_vol_ratio
-    breakout_20d = close >= prior_20_high * 0.995 or high >= prior_20_high * 1.005
-    breakout_50d = close >= prior_50_high * 0.995 or high >= prior_50_high * 1.005
-    price_ignition = (2 <= one_day_return <= 7) or (4 <= two_day_return <= 12)
-    volume_confirm = day_vol_ratio >= 1.2 or two_day_vol_ratio >= 1.5
+    breakout_20d_probe = high >= prior_20_high * 1.005
+    breakout_50d_probe = high >= prior_50_high * 1.005
+    breakout_20d_close = close >= prior_20_high * 0.998 and close_position >= 0.58
+    breakout_50d_close = close >= prior_50_high * 0.998 and close_position >= 0.58
+    breakout_20d = breakout_20d_close or (breakout_20d_probe and close >= prior_20_high * 0.99 and close_position >= 0.72)
+    breakout_50d = breakout_50d_close or (breakout_50d_probe and close >= prior_50_high * 0.99 and close_position >= 0.72)
+    price_ignition = (1.5 <= one_day_return <= 6.5) or (3 <= two_day_return <= 10)
+    volume_confirm = day_vol_ratio >= 1.25 or two_day_vol_ratio >= 1.55
     close_near_high = close_position >= 0.75
     gap_hold = open_ >= prev_close * 1.01 and close >= open_
     breakout_extended = (breakout_20d or breakout_50d) and (
@@ -825,6 +829,25 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         composite_rs = 0.4 * rs_63 + 0.2 * rs_126 + 0.2 * rs_189 + 0.2 * rs_252
         rs_val = clamp((composite_rs + 0.3) / 0.6 * 100)
     rs_not_weak = rs_val >= 50
+
+    market_regime_score = 50.0
+    if benchmark_closes and len(benchmark_closes) >= 80:
+        bench = benchmark_closes
+        bench_close = bench[-1]
+        bench_ma20 = sum(bench[-20:]) / 20
+        bench_ma50 = sum(bench[-50:]) / 50
+        bench_ma200 = sum(bench[-200:]) / 200 if len(bench) >= 200 else bench_ma50
+        bench_ma200_prev = sum(bench[-220:-20]) / 200 if len(bench) >= 220 else bench_ma200
+        bench_ret20 = bench[-1] / bench[-21] - 1 if len(bench) > 20 and bench[-21] else 0.0
+        bench_ret60 = bench[-1] / bench[-61] - 1 if len(bench) > 60 and bench[-61] else 0.0
+        market_regime_score = clamp(
+            (20 if bench_close >= bench_ma20 else 0)
+            + (20 if bench_close >= bench_ma50 else 0)
+            + (20 if bench_ma50 >= bench_ma200 else 0)
+            + (20 if bench_ma200 >= bench_ma200_prev else 0)
+            + (10 if bench_ret20 > 0 else 0)
+            + (10 if bench_ret60 > 0 else 0)
+        )
 
     tight_base_score = float(
         (15 if nr7 else 0)
@@ -936,14 +959,50 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         + (10 if rs_rising else 0)
     )
 
-    # 4. Double-stage Breakout Ignition: Pre-Ignition (蓄势期) and Ignition (确认期)
+    # 4. False Breakout / Distribution Risk
+    failed_20d_breakout = breakout_20d_probe and close < prior_20_high * 0.995
+    failed_50d_breakout = breakout_50d_probe and close < prior_50_high * 0.995
+    failed_breakout_on_volume = (failed_20d_breakout or failed_50d_breakout) and day_vol_ratio >= 1.4
+    large_upper_rejection = candle_range > 0 and upper_shadow >= candle_range * 0.38 and close_position <= 0.55
+    gap_up = open_ >= prev_close * 1.02
+    gap_fade = gap_up and close < max(open_, prev_close * 1.005)
+    high_volume_churn = day_vol_ratio >= 1.8 and one_day_return <= 1.5 and upper_shadow >= max(body_size * 0.8, candle_range * 0.25)
+    climax_reversal = high / prev_close >= 1.05 and close_position <= 0.45 and day_vol_ratio >= 1.5 if prev_close else False
+    ma20_rejection = ma20_val and high >= ma20_val * 1.02 and close < ma20_val and day_vol_ratio >= 1.2
+
+    distribution_days_20 = 0
+    distribution_days_10 = 0
+    for di in range(max(1, len(c) - 20), len(c)):
+        avg_vol = sum(v[max(0, di - 20) : di]) / max(di - max(0, di - 20), 1)
+        down_close = c[di] < c[di - 1] * 0.997
+        heavy_volume = v[di] > v[di - 1] * 1.05 or v[di] > avg_vol * 1.25
+        if down_close and heavy_volume:
+            distribution_days_20 += 1
+            if di >= len(c) - 10:
+                distribution_days_10 += 1
+    distribution_cluster = distribution_days_20 >= 5 or distribution_days_10 >= 3
+    relative_weak_breakout = (breakout_20d_probe or breakout_50d_probe) and rs_val < 45
+
+    false_breakout_distribution_risk_score = clamp(
+        (35 if failed_20d_breakout or failed_50d_breakout else 0)
+        + (15 if failed_breakout_on_volume else 0)
+        + (18 if large_upper_rejection else 0)
+        + (15 if high_volume_churn else 0)
+        + (15 if gap_fade else 0)
+        + (15 if climax_reversal else 0)
+        + (12 if distribution_cluster else 0)
+        + (10 if relative_weak_breakout else 0)
+        + (10 if ma20_rejection else 0)
+    )
+
+    # 5. Double-stage Breakout Ignition: Pre-Ignition (蓄势期) and Ignition (确认期)
     pre_ignition = (
         close >= prior_20_high * 0.95 and close < prior_20_high
         and (tight_base_score >= 55 or volume_dry_score >= 60 or pre_breakout_tension_score >= 65)
     )
     if pre_ignition:
         breakout_ignition_score = 45.0
-    elif breakout_extended:
+    elif breakout_extended or false_breakout_distribution_risk_score >= 45:
         breakout_ignition_score = 0.0
     else:
         breakout_ignition_score = float(
@@ -955,7 +1014,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             + (10 if gap_hold else 0)
         )
 
-    # 5. Overextension Penalty (乖离率惩罚)
+    # 6. Overextension Penalty (乖离率惩罚)
     bias_ma20 = (close / ma20_val - 1) * 100 if ma20_val else 0.0
     bias_ma50 = (close / ma50_now - 1) * 100 if ma50_now else 0.0
     penalty = 0.0
@@ -978,6 +1037,45 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
     if close > year_high * 0.97 and atr_ratio > 1.3:
         penalty += 15
     overextension_penalty_score = clamp(penalty)
+
+    # 7. Low-Risk Entry Quality: constructive pullback/base near support.
+    ma20_dist = abs(close - ma20_val) / ma20_val * 100 if ma20_val else 100.0
+    ma50_dist = abs(close - ma50_now) / ma50_now * 100 if ma50_now else 100.0
+    support_proximity = min(white_dist, bbi_dist, yellow_dist, ma20_dist, ma50_dist)
+    near_rising_support = support_proximity <= 3.0 and (trend_ok or trend_healthy or above_ma50)
+    support_reclaim = bool(
+        (ma20_val and low <= ma20_val * 1.01 and close >= ma20_val and close >= open_)
+        or (white_now and low <= white_now * 1.01 and close >= white_now and close >= open_)
+        or (bbi_now and low <= bbi_now * 1.01 and close >= bbi_now and close >= open_)
+    )
+    constructive_pullback = bool(
+        (trend_ok or trend_healthy)
+        and (ma50_now is None or close >= ma50_now * 0.96)
+        and close_position >= 0.45
+        and one_day_return >= -4.5
+    )
+    volume_cooling = (vol_ma5 <= vol_ma20 * 0.85) or day_vol_ratio <= 0.90 if vol_ma20 else False
+    supply_absorbed = volume_cooling and not distribution_cluster and not high_volume_churn
+    higher_low_base = len(l) > 25 and min(l[-5:]) >= _llv(l, 20, offset=5) * 0.98
+    range_controlled = atr_ratio <= 1.05 and amplitude <= 6.5
+    rs_constructive = rs_val >= 45
+    not_extended = overextension_penalty_score < 20 and bias_ma20 <= 8 and bias_ma50 <= 15
+    risk_clear = false_breakout_distribution_risk_score < 35
+
+    low_risk_entry_score = clamp(
+        (18 if constructive_pullback else 0)
+        + (16 if near_rising_support else 0)
+        + (14 if support_reclaim or close_position >= 0.58 else 0)
+        + (14 if supply_absorbed else 0)
+        + (10 if range_controlled else 0)
+        + (10 if higher_low_base else 0)
+        + (10 if rs_constructive else 0)
+        + (8 if not_extended else 0)
+    )
+    if not constructive_pullback or not risk_clear:
+        low_risk_entry_score = min(low_risk_entry_score, 44.0)
+    if overextension_penalty_score >= 40 or false_breakout_distribution_risk_score >= 45:
+        low_risk_entry_score = min(low_risk_entry_score, 30.0)
 
     # VCP: Volatility Contraction Pattern detection
     lookback_vcp = min(120, len(c) - 5)
@@ -1286,10 +1384,13 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
         "trend_template": round(trend_template_val, 1),
         "wave_position": round(wave_val, 1),
         "relative_strength": round(rs_val, 1),
+        "market_regime": round(market_regime_score, 1),
         "tight_base_setup": round(tight_base_score, 1),
         "volume_dry_pocket": round(volume_dry_score, 1),
         "pre_breakout_tension": round(pre_breakout_tension_score, 1),
+        "low_risk_entry": round(low_risk_entry_score, 1),
         "overextension_penalty": round(overextension_penalty_score, 1),
+        "false_breakout_distribution_risk": round(false_breakout_distribution_risk_score, 1),
         "signals": {
             "trend_ok": trend_ok,
             "strong_trend": strong_trend,
@@ -1317,6 +1418,10 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "close_position": round(close_position, 2),
             "breakout_20d": breakout_20d,
             "breakout_50d": breakout_50d,
+            "breakout_20d_probe": breakout_20d_probe,
+            "breakout_50d_probe": breakout_50d_probe,
+            "breakout_20d_close": breakout_20d_close,
+            "breakout_50d_close": breakout_50d_close,
             "one_day_return_pct": round(one_day_return, 2),
             "two_day_return_pct": round(two_day_return, 2),
             "day_volume_ratio": round(day_vol_ratio, 2),
@@ -1325,6 +1430,16 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "volume_confirm": volume_confirm,
             "gap_hold": gap_hold,
             "breakout_extended": breakout_extended,
+            "failed_20d_breakout": failed_20d_breakout,
+            "failed_50d_breakout": failed_50d_breakout,
+            "failed_breakout_on_volume": failed_breakout_on_volume,
+            "large_upper_rejection": large_upper_rejection,
+            "gap_fade": gap_fade,
+            "high_volume_churn": high_volume_churn,
+            "climax_reversal": climax_reversal,
+            "distribution_days_20": distribution_days_20,
+            "distribution_days_10": distribution_days_10,
+            "distribution_cluster": distribution_cluster,
             "vcp_contracting": vcp_contracting,
             "vcp_near_pivot": vcp_near_pivot,
             "candlestick_pattern": best_pattern > 0,
@@ -1334,6 +1449,7 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "trend_template_conditions": tt_conditions,
             "wave_stage": wave_val,
             "rs_score": round(rs_val, 1),
+            "market_regime_score": round(market_regime_score, 1),
             "nr7": nr7,
             "atr_ratio": round(atr_ratio, 2),
             "close_tightness": close_tightness,
@@ -1354,10 +1470,20 @@ def technical_factors(rows: list[dict[str, Any]], benchmark_closes: list[float] 
             "vol_dry_price_flat": vol_dry_price_flat,
             "trend_template_ok": trend_template_ok,
             "rs_rising": rs_rising,
+            "support_proximity_pct": round(support_proximity, 2),
+            "near_rising_support": near_rising_support,
+            "support_reclaim": support_reclaim,
+            "constructive_pullback": constructive_pullback,
+            "volume_cooling": volume_cooling,
+            "supply_absorbed": supply_absorbed,
+            "higher_low_base": higher_low_base,
+            "range_controlled": range_controlled,
+            "risk_clear": risk_clear,
             "bias_ma20": round(bias_ma20, 2),
             "bias_ma50": round(bias_ma50, 2),
             "consecutive_up": consecutive_up,
             "overextension_penalty_score": round(overextension_penalty_score, 2),
+            "false_breakout_distribution_risk_score": round(false_breakout_distribution_risk_score, 2),
         },
     }
 
@@ -1417,10 +1543,13 @@ def component_score(name: str, row: dict[str, Any], text: str, preset: dict[str,
         "trend_template",
         "wave_position",
         "relative_strength",
+        "market_regime",
         "tight_base_setup",
         "volume_dry_pocket",
         "pre_breakout_tension",
+        "low_risk_entry",
         "overextension_penalty",
+        "false_breakout_distribution_risk",
     }:
         technical = row.get("technical") or {}
         return float(technical.get(name) or 0)

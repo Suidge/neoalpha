@@ -1,9 +1,9 @@
 {
   "name": "short_term_momentum",
-  "label": "短线动量选股器 v2",
-  "version": 4,
+  "label": "短线动量选股器 v2.1",
+  "version": 5,
   "horizon": "1-4 weeks",
-  "description": "双层架构：基座分以趋势质量、动量、相对强度、流动性和风险扣分为主，题材/催化只作辅助；亮点信号覆盖回调洗盘与放量突破启动，并采用更高阈值过滤低置信 setup。",
+  "description": "双层架构：基座分以趋势质量、低风险买点、相对强度、流动性和风险扣分为主，题材/催化只作辅助；亮点信号覆盖缩量回踩、蓄势和确认突破，同时用假突破/出货风险过滤追高陷阱。",
   "highlight_bonus_weight": 0.10,
   "concept_keywords": [
     "AI",
@@ -25,16 +25,19 @@
   "foundation": {
     "min_score": 45,
     "components": [
-      {"name": "trend_regime", "weight": 22},
-      {"name": "momentum", "weight": 10},
-      {"name": "relative_strength", "weight": 18},
-      {"name": "liquidity_volume", "weight": 12},
+      {"name": "trend_regime", "weight": 18},
+      {"name": "market_regime", "weight": 8},
+      {"name": "momentum", "weight": 8},
+      {"name": "relative_strength", "weight": 15},
+      {"name": "liquidity_volume", "weight": 10},
       {"name": "accumulation_quality", "weight": 12},
-      {"name": "concept_strength", "weight": 4},
-      {"name": "catalyst", "weight": 4},
-      {"name": "tight_base_setup", "weight": 14},
+      {"name": "low_risk_entry", "weight": 15},
+      {"name": "concept_strength", "weight": 3},
+      {"name": "catalyst", "weight": 3},
+      {"name": "tight_base_setup", "weight": 8},
       {"name": "risk_penalty", "weight": -25},
-      {"name": "overextension_penalty", "weight": -25}
+      {"name": "overextension_penalty", "weight": -25},
+      {"name": "false_breakout_distribution_risk", "weight": -35}
     ]
   },
   "highlights": [
@@ -42,6 +45,7 @@
     {"name": "macd_phase_confirmation", "threshold": 70, "label": "📈 MACD相位确认"},
     {"name": "impulse_confirmation", "threshold": 70, "label": "🔥 砖型反转"},
     {"name": "breakout_ignition", "threshold": 70, "label": "🚀 放量突破启动"},
+    {"name": "low_risk_entry", "threshold": 70, "label": "🟢 低风险买点"},
     {"name": "pullback_setup", "threshold": 55, "label": "🔄 强势回调"},
     {"name": "vcp_pattern", "threshold": 65, "label": "📐 VCP收缩突破"},
     {"name": "candlestick_reversal", "threshold": 70, "label": "🕯️ K线反转形态"},

@@ -836,7 +836,7 @@ def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_s
     long_results = stock_screens.get("long_term_compounder", {}).get("results", [])
     tactical = [r.get("symbol") for r in short_results if r.get("action") in ("Strong Watch", "Setup Watch") and r.get("symbol")]
     thesis = [r.get("symbol") for r in long_results if r.get("action") in ("Thesis Candidate", "DCF Candidate") and r.get("symbol")]
-    avoid = [r.get("symbol") for r in short_results if r.get("action") == "Avoid Chase" and r.get("symbol")]
+    avoid = [r.get("symbol") for r in short_results if r.get("action") in ("Avoid", "Avoid Chase") and r.get("symbol")]
     benchmarks = []
     for sym in cfg["index_symbols"]:
         row = quotes.get(sym)
@@ -869,7 +869,7 @@ def default_market_watch(market: str, quotes: Dict[str, Dict[str, Any]], stock_s
             "tactical_watch_symbols": tactical[:8],
             "thesis_candidate_symbols": thesis[:8],
             "avoid_chase_symbols": avoid[:8],
-            "watch": "盘中优先验证短线选股器高分标的是否继续扩散；若 Avoid Chase 标的领跌或高分标的失效，优先判断动量断裂/风险收缩。",
+            "watch": "盘中优先验证短线选股器高分标的是否继续扩散；若 Avoid 标的领跌或高分标的失效，优先判断动量断裂/风险收缩。",
         },
         "medium_term_health": {
             "source": "medium_term_health",

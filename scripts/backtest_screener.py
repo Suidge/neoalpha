@@ -15,7 +15,34 @@ if str(scripts_dir) not in sys.path:
 import screen_stocks
 
 # Preset directories and default paths
-THESIS_DIR = Path("/Users/neoshi/Documents/neoalpha/thesis-tracker")
+THESIS_DIR = screen_stocks.THESIS_DIR
+BENCHMARK_BY_SUFFIX = {
+    ".US": "SPY.US",
+    ".HK": "2800.HK",
+    ".SH": "000300.SH",
+    ".SZ": "000300.SH",
+}
+
+
+def benchmark_symbol_for_suffix(suffix: str) -> str:
+    return BENCHMARK_BY_SUFFIX.get(suffix.upper(), "SPY.US")
+
+
+def apply_cooldown(trigger_indices: list[int], cooldown_days: int) -> list[int]:
+    if cooldown_days <= 0:
+        return trigger_indices
+    kept: list[int] = []
+    last = -10**9
+    for idx in trigger_indices:
+        if idx - last >= cooldown_days:
+            kept.append(idx)
+            last = idx
+    return kept
+
+
+def load_thesis_symbols(thesis_dir: Path, market: str | None = None) -> list[str]:
+    symbols = screen_stocks.load_thesis_symbols(thesis_dir)
+    return screen_stocks.filter_symbols_by_market(symbols, market)
 
 def load_thesis_us_symbols(thesis_dir: Path) -> list[str]:
     """Load all US symbols from thesis-tracker directory filenames."""
@@ -36,7 +63,11 @@ def run_backtest_for_symbol(
     signal_filter: str,
     threshold: float,
     hold_days_list: list[int],
-    lookback_days: int
+    lookback_days: int,
+    thesis_dir: Path = THESIS_DIR,
+    cooldown_days: int = 5,
+    technical_cache_hours: float = 12.0,
+    kline_delay: float = 0.0,
 ) -> list[dict]:
     """Run historical sliding window backtest for a single symbol."""
     print(f"[INFO] Running backtest for {symbol}...")
@@ -44,18 +75,19 @@ def run_backtest_for_symbol(
     # Fetch enough K-lines to cover lookback_days + some indicator calculation buffers (min 120 bars)
     total_bars = lookback_days + 150
     # Use screen_stocks fetch_daily_klines
-    rows = screen_stocks.fetch_daily_klines(symbol, bars=total_bars, cache_hours=12.0)
+    rows = screen_stocks.fetch_daily_klines(symbol, bars=total_bars, cache_hours=technical_cache_hours, delay=kline_delay)
     if not rows or len(rows) < 120:
         print(f"[WARNING] Insufficient data for {symbol}: found {len(rows)} bars, need >= 120.")
         return []
     
     # Fetch benchmark K-lines for relative strength composite calculation
     suffix = screen_stocks._detect_market_suffix(symbol)
-    bench_symbol = "SPY.US" if suffix == "US" else "2800.HK"
-    bench_rows = screen_stocks.fetch_daily_klines(bench_symbol, bars=total_bars, cache_hours=12.0)
+    bench_symbol = benchmark_symbol_for_suffix(suffix)
+    bench_rows = screen_stocks.fetch_daily_klines(bench_symbol, bars=total_bars, cache_hours=technical_cache_hours, delay=kline_delay)
     bench_closes = [r["close"] for r in bench_rows] if bench_rows else None
     
     signals_triggered = []
+    last_trigger_idx = -10**9
     
     # Slide the window from bar index 120 up to the end of rows
     for t in range(120, len(rows)):
@@ -101,7 +133,7 @@ def run_backtest_for_symbol(
         }
         
         # Calculate scores (thesis text is bypassed for technical backtest)
-        scored = screen_stocks.score_row(row_data, preset, THESIS_DIR)
+        scored = screen_stocks.score_row(row_data, preset, thesis_dir)
         
         # Determine if signal is triggered
         triggered = False
@@ -132,6 +164,9 @@ def run_backtest_for_symbol(
             triggered = sig_val >= threshold
             
         if triggered:
+            if cooldown_days > 0 and t - last_trigger_idx < cooldown_days:
+                continue
+            last_trigger_idx = t
             signal_date = hist_rows[-1]["date"]
             close_at_t = hist_rows[-1]["close"]
             
@@ -242,11 +277,15 @@ def main():
     parser.add_argument("--symbols", help="Comma-separated symbols to backtest (e.g. IBM.US,HOOD.US,QCOM.US)")
     parser.add_argument("--from-thesis", action="store_true", help="Use symbols from thesis-tracker")
     parser.add_argument("--thesis-dir", default=str(THESIS_DIR), help="Path to thesis-tracker directory")
+    parser.add_argument("--market", choices=["US", "HK", "CN", "A", "SH", "SZ"], help="Filter thesis symbols by market")
     parser.add_argument("--preset", default="short_term_momentum", help="Preset name or file path")
     parser.add_argument("--signal", default="all", help="Signal to backtest: 'all' or name of a component (e.g., 'tight_base_setup', 'volume_dry_pocket', 'pre_breakout_tension')")
     parser.add_argument("--threshold", type=float, default=55.0, help="Score threshold for specific signals (ignored if signal is 'all')")
     parser.add_argument("--hold-days", default="5,10,20", help="Comma-separated holding periods in days (e.g., 5,10,20)")
     parser.add_argument("--lookback-days", type=int, default=250, help="Number of historical sliding days to test")
+    parser.add_argument("--cooldown-days", type=int, default=5, help="Minimum trading days between triggers for the same symbol")
+    parser.add_argument("--technical-cache-hours", type=float, default=12.0, help="Daily kline cache TTL in hours")
+    parser.add_argument("--kline-delay", type=float, default=0.0, help="Delay after each kline fetch")
     parser.add_argument("--json", action="store_true", help="Print results as JSON")
     args = parser.parse_args()
     
@@ -255,11 +294,12 @@ def main():
     
     symbols = []
     if args.symbols:
-        symbols = [s.strip() for s in args.symbols.split(",") if s.strip()]
+        symbols = [screen_stocks.normalize_symbol(s) for s in args.symbols.split(",") if s.strip()]
     elif args.from_thesis:
-        symbols = load_thesis_us_symbols(thesis_dir)
+        symbols = load_thesis_symbols(thesis_dir, args.market)
     else:
         symbols = ["IBM.US", "HOOD.US", "QCOM.US", "INTC.US"]
+    symbols = screen_stocks.filter_symbols_by_market(symbols, args.market)
         
     if not symbols:
         print("[ERROR] No symbols to backtest.")
@@ -273,6 +313,7 @@ def main():
     print(f"Signal tested    : {args.signal} (Threshold: {args.threshold})")
     print(f"Holding periods  : {hold_days_list} days")
     print(f"Backtest window  : {args.lookback_days} trading days")
+    print(f"Cooldown         : {args.cooldown_days} trading days per symbol")
     print(f"Symbols universe : {len(symbols)} ({', '.join(symbols[:10])}{'...' if len(symbols) > 10 else ''})")
     print(f"==================================================")
     
@@ -280,7 +321,16 @@ def main():
     for s in symbols:
         try:
             triggers = run_backtest_for_symbol(
-                s, preset, args.signal, args.threshold, hold_days_list, args.lookback_days
+                s,
+                preset,
+                args.signal,
+                args.threshold,
+                hold_days_list,
+                args.lookback_days,
+                thesis_dir=thesis_dir,
+                cooldown_days=args.cooldown_days,
+                technical_cache_hours=args.technical_cache_hours,
+                kline_delay=args.kline_delay,
             )
             all_triggers.extend(triggers)
         except Exception as e:
@@ -296,6 +346,8 @@ def main():
                 "threshold": args.threshold,
                 "hold_days": hold_days_list,
                 "lookback_days": args.lookback_days,
+                "cooldown_days": args.cooldown_days,
+                "market": args.market,
                 "symbols": symbols
             },
             "triggers_count": len(all_triggers),
